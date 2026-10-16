@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="Microsoft YaHei" data-pptx-page-role="content">
+  <!-- 回归夹具 h02 — h01 的同册跳转目标页。 -->
+  <rect id="page-background" x="0" y="0" width="1280" height="720" fill="#FFFFFF" data-pptx-role="background"/>
+
+  <g id="target-card" data-pptx-bounds="70 150 1140 200">
+    <rect x="70" y="150" width="1140" height="200" rx="8" fill="#FFFFFF" stroke="#1B4593" stroke-width="1.5"/>
+    <text x="90" y="196" font-size="22" font-weight="bold" fill="#1B4593">跳转目标页</text>
+    <text x="90" y="232" font-size="14" fill="#778495">若从第 1 页点按钮能落到这里，说明同册跳转链路通。</text>
+    <text x="90" y="258" font-size="14" fill="#778495">本页为超链接连通性夹具，非业务内容。</text>
+  </g>
+</svg>

@@ -122,6 +122,61 @@ describe('OpenAICompatibleProvider endpoint resolution', () => {
   });
 });
 
+describe('OpenAICompatibleProvider response diagnostics', () => {
+  it('preserves upstream request and response identifiers with the returned tool name', async () => {
+    const toolResponse = JSON.stringify({
+      id: 'response-123',
+      model: 'served-model-v2',
+      choices: [
+        {
+          delta: {
+            tool_calls: [
+              {
+                index: 0,
+                id: 'call-1',
+                function: { name: 'web_answer', arguments: '{}' },
+              },
+            ],
+          },
+        },
+      ],
+    });
+    const fetchImpl: typeof fetch = async () => {
+      const response = sse(toolResponse, wireFinish('tool_calls'));
+      return new Response(response.body, {
+        headers: { 'x-request-id': 'request-456' },
+      });
+    };
+    const model = new OpenAICompatibleProvider(
+      {
+        id: 'model-1',
+        baseUrl: 'https://host/v1',
+        apiKey: '',
+        model: 'configured-model',
+      },
+      { fetchImpl },
+    );
+
+    const chunks = await collect(
+      model.stream(
+        request({
+          tools: [{ name: 'web_search', description: '搜索网络', inputSchema: { type: 'object' } }],
+        }),
+      ),
+    );
+
+    expect(chunks).toContainEqual({
+      type: 'tool-call',
+      toolCall: { id: 'call-1', name: 'web_answer', input: {} },
+    });
+    expect(doneOf(chunks)).toMatchObject({
+      providerRequestId: 'request-456',
+      providerResponseId: 'response-123',
+      responseModel: 'served-model-v2',
+    });
+  });
+});
+
 describe('OpenAICompatibleProvider streaming', () => {
   it('emits text deltas in order and finishes with done', async () => {
     stubFetch(() => sse(delta({ content: '你好' }), delta({ content: '，世界' })));
@@ -217,6 +272,35 @@ describe('OpenAICompatibleProvider streaming', () => {
       { type: 'text-delta', delta: '有效' },
       { type: 'done' },
     ]);
+  });
+
+  it('preserves a tool name returned outside the request tool list for diagnostics', async () => {
+    const fetchMock = stubFetch(() =>
+      sse(
+        delta({
+          tool_calls: [
+            { index: 0, id: 'call-1', function: { name: 'web_answer', arguments: '{}' } },
+          ],
+        }),
+        wireFinish('tool_calls'),
+      ),
+    );
+
+    expect(
+      await collect(
+        provider().stream(
+          request({
+            tools: [
+              { name: 'web_search', description: '搜索网页', inputSchema: { type: 'object' } },
+            ],
+          }),
+        ),
+      ),
+    ).toMatchObject([
+      { type: 'tool-call', toolCall: { name: 'web_answer' } },
+      { type: 'done', finishReason: 'tool-calls' },
+    ]);
+    expect(bodyOf(fetchMock).tools).toMatchObject([{ function: { name: 'web_search' } }]);
   });
 });
 

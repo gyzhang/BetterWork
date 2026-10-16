@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -30,6 +31,9 @@ const runPreflight = (...args: string[]) =>
     cwd: repositoryRoot,
     encoding: 'utf8',
   });
+
+const skillContentHash = (content: string): string =>
+  createHash('sha256').update('SKILL.md').update('\0').update(content).digest('hex');
 
 describe('expert release preflight CLI', () => {
   it('accepts empty release lists for a clean installation package', () => {
@@ -64,6 +68,50 @@ describe('expert release preflight CLI', () => {
 
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('leftover-test-resource');
+  });
+
+  it('uses the runtime Skill content hash and leaves package metadata and wheelhouse to their own checks', () => {
+    const root = packagedResources(
+      { formatVersion: 1, skills: [] },
+      { formatVersion: 1, experts: [] },
+    );
+    const skillRoot = path.join(root, 'skills', 'ppt-generation-expert');
+    mkdirSync(path.join(skillRoot, 'runtime', 'wheelhouse'), { recursive: true });
+    const skillContent = '---\nname: PPT\n---\n# Instructions\n';
+    writeFileSync(path.join(skillRoot, 'SKILL.md'), skillContent);
+    writeFileSync(path.join(skillRoot, 'betterwork.skill.json'), '{"packageVersion":"1"}');
+    writeFileSync(path.join(skillRoot, 'runtime/wheelhouse/example.whl'), 'wheel-v1');
+    writeFileSync(
+      path.join(root, 'skills/release-manifest.json'),
+      JSON.stringify({
+        formatVersion: 1,
+        skills: [
+          {
+            skillId: 'ppt-generation-expert',
+            resourceName: 'ppt-generation-expert',
+            name: 'PPT',
+            description: '',
+            contentHash: skillContentHash(skillContent),
+            profileHash: 'profile-hash',
+            dependencyFingerprint: 'dependency-fingerprint',
+            scopeHash: 'scope-hash',
+          },
+        ],
+      }),
+    );
+
+    const initial = runPreflight('--packaged-root', root);
+    expect(initial.status).toBe(0);
+
+    writeFileSync(path.join(skillRoot, 'betterwork.skill.json'), '{"packageVersion":"2"}');
+    writeFileSync(path.join(skillRoot, 'runtime/wheelhouse/example.whl'), 'wheel-v2');
+    const packageOnlyChanges = runPreflight('--packaged-root', root);
+    expect(packageOnlyChanges.status).toBe(0);
+
+    writeFileSync(path.join(skillRoot, 'SKILL.md'), `${skillContent}changed`);
+    const changedSkillContent = runPreflight('--packaged-root', root);
+    expect(changedSkillContent.status).toBe(1);
+    expect(changedSkillContent.stderr).toContain('contentHash mismatch');
   });
 
   it('keeps resource verification available without a signing identity', () => {

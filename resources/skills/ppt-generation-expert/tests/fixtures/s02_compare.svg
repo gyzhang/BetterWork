@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="Microsoft YaHei" data-pptx-page-role="content">
+  <!-- 回归夹具 s02 — 分组版多骨架页（水平条对比 + 阶段块 + 结论条）
+       与 s01 的骨架语言刻意差异化：相邻页不同骨架结构，避免整册同质。
+       分组：每个逻辑模块一个顶层 g id 并声明 data-pptx-bounds。 -->
+  <rect id="page-background" x="0" y="0" width="1280" height="720" fill="#FFFFFF" data-pptx-role="background"/>
+
+  <g id="summary-band" data-pptx-bounds="70 135 1140 58">
+    <rect x="70" y="135" width="1140" height="58" rx="8" fill="#E4E6EA"/>
+    <path d="M76 135.25A8 8 0 0 0 70 143V185A8 8 0 0 0 76 192.75Z" fill="#1B4593"/>
+    <text x="92" y="159" font-size="14" fill="#0C2864">两期对比页：左侧为水平条对比，右侧为流程阶段块，验证不同骨架的合规性。</text>
+    <text x="92" y="181" font-size="14" fill="#0C2864">该页同时覆盖 line/polygon 编译为 freeform 的路径，以及 text-anchor 的合法用法。</text>
+  </g>
+
+  <g id="compare-bars" data-pptx-bounds="70 209 700 308">
+    <rect x="70" y="213" width="700" height="300" rx="8" fill="#FFFFFF" stroke="#1B4593" stroke-width="1.5"/>
+    <text x="90" y="241" font-size="16" font-weight="bold" fill="#0C2864">各项目投入强度对比（万元）</text>
+    <g id="compare-bars-plot">
+      <text x="150" y="283" font-size="14" fill="#778495" text-anchor="end">源启平台</text>
+      <rect x="160" y="271" width="520" height="16" fill="#1B4593"/>
+      <text x="690" y="283" font-size="14" fill="#0C2864">424.5</text>
+      <text x="150" y="323" font-size="14" fill="#778495" text-anchor="end">智能体中台</text>
+      <rect x="160" y="311" width="310" height="16" fill="#266DE7"/>
+      <text x="480" y="323" font-size="14" fill="#0C2864">184.2</text>
+      <text x="150" y="363" font-size="14" fill="#778495" text-anchor="end">信贷重构</text>
+      <rect x="160" y="351" width="150" height="16" fill="#048AE3"/>
+      <text x="320" y="363" font-size="14" fill="#0C2864">51.8</text>
+      <text x="150" y="403" font-size="14" fill="#778495" text-anchor="end">其他</text>
+      <rect x="160" y="391" width="60" height="16" fill="#00D3E4"/>
+      <text x="230" y="403" font-size="14" fill="#0C2864">21.9</text>
+    </g>
+    <line x1="160" y1="430" x2="680" y2="430" stroke="#E4E6EA" stroke-width="1"/>
+    <text x="160" y="455" font-size="14" fill="#778495">前两项合计占 89.1%，投入高度集中。</text>
+    <text x="160" y="480" font-size="14" fill="#778495">口径：同项目跨月归集，不含设备摊销。</text>
+  </g>
+
+  <g id="compare-stages" data-pptx-bounds="800 209 410 308">
+    <rect x="800" y="213" width="410" height="300" rx="8" fill="#FFFFFF" stroke="#1B4593" stroke-width="1.5"/>
+    <text x="820" y="241" font-size="16" font-weight="bold" fill="#0C2864">阶段推进</text>
+    <g id="compare-stages-flow">
+      <rect x="820" y="266" width="370" height="46" rx="8" fill="#E4E6EA"/>
+      <text x="840" y="294" font-size="14" fill="#0C2864">1. 需求澄清与口径对齐</text>
+      <polygon points="1005,322 1025,338 1005,354 985,338" fill="#266DE7"/>
+      <rect x="820" y="364" width="370" height="46" rx="8" fill="#E4E6EA"/>
+      <text x="840" y="392" font-size="14" fill="#0C2864">2. 数据归集与差异定位</text>
+      <polygon points="1005,420 1025,436 1005,452 985,436" fill="#266DE7"/>
+      <rect x="820" y="462" width="370" height="46" rx="8" fill="#E4E6EA"/>
+      <text x="840" y="490" font-size="14" fill="#0C2864">3. 结论输出与行动项</text>
+    </g>
+  </g>
+
+  <g id="conclusion-band" data-pptx-bounds="70 536 1140 108">
+    <rect x="70" y="540" width="1140" height="100" rx="8" fill="#0C2864"/>
+    <text x="90" y="578" font-size="16" font-weight="bold" fill="#FFFFFF">结论：投入集中度是可控风险，不是失控信号。</text>
+    <text x="90" y="608" font-size="14" fill="#FFFFFF">后续动作：将报工口径纳入月度经营会固定议题，避免预算外借工重复发生。</text>
+  </g>
+
+  <g id="note" data-pptx-bounds="70 666 900 30">
+    <text x="70" y="680" font-size="14" fill="#778495">数据来源：本回归夹具内置样例值，仅用于管线自检，非真实业务数据。</text>
+  </g>
+</svg>

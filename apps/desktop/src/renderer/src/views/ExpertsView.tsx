@@ -36,6 +36,7 @@ import type { ExpertsState } from '../hooks/use-experts';
 import { useViewMode } from '../hooks/use-view-mode';
 import { ChevronLeftIcon, ExpertIcon, PlusIcon, SummonIcon } from '../icons';
 import { reportAction } from '../lib/async-action';
+import { toolStageLabel } from '../lib/labels';
 import { materialCandidateAppliesToWorkspace } from '../lib/materials';
 
 const VIEW_MODE_STORAGE_KEY = 'experts-view-mode';
@@ -724,6 +725,9 @@ function ExpertEditor({
 
 function ExpertDetailPanel({
   detail,
+  skills,
+  skillsLoading,
+  mcpConnections,
   memories,
   models,
   workspaceId,
@@ -735,6 +739,9 @@ function ExpertDetailPanel({
   onManageMemories,
 }: {
   detail: ExpertDetail;
+  skills: SkillSummary[];
+  skillsLoading: boolean;
+  mcpConnections: McpConnectionSummary[];
   memories: MemoryRecord[];
   models: ModelProfileSummary[];
   workspaceId?: string;
@@ -752,6 +759,20 @@ function ExpertDetailPanel({
   const selectedModel = selectedModelProfileId
     ? models.find((model) => model.id === selectedModelProfileId)
     : undefined;
+  const skillBindings = detail.revision.skillPreset.map((binding) => ({
+    binding,
+    skill: skills.find((skill) => skill.id === binding.skillId),
+  }));
+  const mcpBindings = detail.revision.mcpToolBindings ?? [];
+  const selectedMcpTools = mcpBindings.map((binding) => {
+    const connection = mcpConnections.find((candidate) => candidate.id === binding.connectionId);
+    const tool = connection?.tools.find((candidate) => candidate.id === binding.toolId);
+    return { binding, connection, tool };
+  });
+  const builtinToolNames =
+    detail.revision.builtinToolPolicy.mode === 'allow-list'
+      ? detail.revision.builtinToolPolicy.toolNames
+      : [];
   const expertMemories = memories.filter((memory) => {
     if (memory.status === 'deleted') return false;
     if (memory.scope.kind === 'expert') return memory.scope.expertId === detail.id;
@@ -821,18 +842,78 @@ function ExpertDetailPanel({
           </section>
           <section className="expert-detail-section">
             <SectionHeader title="能力" />
-            <p>
-              {detail.revision.skillPreset.length} 个 Skill 预设 ·{' '}
-              {detail.revision.builtinToolPolicy.mode === 'application-defaults'
-                ? '使用算台默认工具'
-                : `${detail.revision.builtinToolPolicy.toolNames.length} 个内置工具`}
-              {detail.revision.mcpToolBindings?.length
-                ? ` · ${detail.revision.mcpToolBindings.length} 个 MCP 工具预设`
-                : ''}
-              {detail.revision.referenceMaterials?.length
-                ? ` · ${detail.revision.referenceMaterials.length} 个常用参考`
-                : ''}
-            </p>
+            <div className="expert-capability-groups">
+              <div className="expert-capability-group">
+                <strong>Skill（{skillBindings.length}）</strong>
+                {skillsLoading ? (
+                  <small className="muted-text">正在读取 Skill 清单…</small>
+                ) : skillBindings.length > 0 ? (
+                  <ul className="expert-capability-list">
+                    {skillBindings.map(({ binding, skill }) => (
+                      <li key={binding.skillId}>
+                        <span>
+                          {skill
+                            ? skill.description || skill.name
+                            : `未找到 Skill（${binding.skillId}）`}
+                        </span>
+                        {skill && (
+                          <small className="muted-text">
+                            {binding.revisionId === skill.currentRevisionId
+                              ? '绑定当前修订'
+                              : '绑定固定修订'}
+                          </small>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <small className="muted-text">未绑定 Skill</small>
+                )}
+              </div>
+              <div className="expert-capability-group">
+                <strong>
+                  内置工具
+                  {detail.revision.builtinToolPolicy.mode === 'allow-list'
+                    ? `（${builtinToolNames.length}）`
+                    : ''}
+                </strong>
+                {detail.revision.builtinToolPolicy.mode === 'application-defaults' ? (
+                  <small className="muted-text">
+                    使用算台默认工具；本次运行的可用工具还受材料范围和已配置服务影响。
+                  </small>
+                ) : builtinToolNames.length > 0 ? (
+                  <ul className="expert-capability-list">
+                    {builtinToolNames.map((name) => (
+                      <li key={name}>{toolStageLabel(name)}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <small className="muted-text">未选择内置工具</small>
+                )}
+              </div>
+              {selectedMcpTools.length > 0 && (
+                <div className="expert-capability-group">
+                  <strong>MCP 工具（{selectedMcpTools.length}）</strong>
+                  <ul className="expert-capability-list">
+                    {selectedMcpTools.map(({ binding, connection, tool }) => (
+                      <li key={`${binding.connectionId}:${binding.toolId}`}>
+                        <span>
+                          {connection?.name ?? '连接不可用'} · {tool?.name ?? '工具不可用'}
+                        </span>
+                        {tool?.description && (
+                          <small className="muted-text">{tool.description}</small>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {(detail.revision.referenceMaterials?.length ?? 0) > 0 && (
+                <small className="muted-text">
+                  另有 {detail.revision.referenceMaterials?.length ?? 0} 个常用参考
+                </small>
+              )}
+            </div>
             <small className="muted-text">
               模型偏好：
               {detail.revision.modelReference.mode === 'application-default'
@@ -1126,6 +1207,9 @@ export function ExpertsPage({
     return (
       <ExpertDetailPanel
         detail={selected}
+        skills={skills}
+        skillsLoading={skillsLoading}
+        mcpConnections={mcpConnections}
         memories={memories}
         models={models}
         {...(workspaceId ? { workspaceId } : {})}

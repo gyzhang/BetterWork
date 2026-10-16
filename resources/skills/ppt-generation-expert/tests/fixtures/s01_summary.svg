@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="Microsoft YaHei" data-pptx-page-role="content">
+  <!-- 回归夹具 s01 — 分组 + 值驱动柱图（几何由 svg_position_calculator.py 产出，非手算）
+       柱图调用（几何权威口径，改数必须重跑同一条命令）：
+         svg_position_calculator.py calc bar，参数：data=八月度值与月份标签、
+         area=140,440,1180,600、bar-width=90、value-range=0,160。
+       刻度口径：area 底边 y=600 为 0，顶边 y=440 为 160，故 1 单位 = 1px；
+       柱 X 间距 117px 由计算器槽位模型给出（手算会错，勿凭感觉放坐标）。
+       注意：XML 注释内不得出现连续两个连字符，故此处只写参数名不写命令行原文。 -->
+  <rect id="page-background" x="0" y="0" width="1280" height="720" fill="#FFFFFF" data-pptx-role="background"/>
+
+  <g id="summary-band" data-pptx-bounds="70 135 1140 58">
+    <rect x="70" y="135" width="1140" height="58" rx="8" fill="#E4E6EA"/>
+    <path d="M76 135.25A8 8 0 0 0 70 143V185A8 8 0 0 0 76 192.75Z" fill="#1B4593"/>
+    <text x="92" y="159" font-size="14" fill="#0C2864">回归基线页：以下为契约合规的最小内容页，用于验证管线端到端可用性。</text>
+    <text x="92" y="181" font-size="14" fill="#0C2864">页面不含标题（标题由公司模板版式占位符承载），内容区自 y135 起、安全边距 x70~1210。</text>
+  </g>
+
+  <g id="cost-kpi" data-pptx-bounds="70 209 1140 128">
+    <g id="cost-kpi-1">
+      <rect x="70" y="213" width="360" height="120" rx="8" fill="#FFFFFF" stroke="#1B4593" stroke-width="1.5"/>
+      <text x="90" y="253" font-size="22" font-weight="bold" fill="#1B4593">682.39</text>
+      <text x="90" y="283" font-size="14" fill="#778495">净投入（万元）</text>
+      <text x="90" y="311" font-size="14" fill="#778495">统计口径：1-8 月累计</text>
+    </g>
+    <g id="cost-kpi-2">
+      <rect x="455" y="213" width="360" height="120" rx="8" fill="#FFFFFF" stroke="#1B4593" stroke-width="1.5"/>
+      <text x="475" y="253" font-size="22" font-weight="bold" fill="#1B4593">85.30</text>
+      <text x="475" y="283" font-size="14" fill="#778495">月均投入（万元）</text>
+      <text x="475" y="311" font-size="14" fill="#778495">统计口径：682.39 / 8</text>
+    </g>
+    <g id="cost-kpi-3">
+      <rect x="840" y="213" width="370" height="120" rx="8" fill="#FFFFFF" stroke="#1B4593" stroke-width="1.5"/>
+      <text x="860" y="253" font-size="22" font-weight="bold" fill="#1B4593">95.6%</text>
+      <text x="860" y="283" font-size="14" fill="#778495">人力成本占比</text>
+      <text x="860" y="311" font-size="14" fill="#778495">口径：人力 / 总投入</text>
+    </g>
+  </g>
+
+  <g id="cost-chart" data-pptx-bounds="70 356 1140 288">
+    <rect x="70" y="360" width="1140" height="280" rx="8" fill="#FFFFFF" stroke="#1B4593" stroke-width="1.5"/>
+    <text x="90" y="388" font-size="14" font-weight="bold" fill="#0C2864">月度投入分布（形状柱图 · 单位：万元）</text>
+    <g id="cost-chart-area">
+      <line x1="140" y1="600" x2="1180" y2="600" stroke="#778495" stroke-width="1.2"/>
+      <line x1="140" y1="600" x2="140" y2="440" stroke="#778495" stroke-width="1.2"/>
+      <!-- chart-plot-area: object=cost-chart | 140,440,1180,600 -->
+      <!-- chart-data: object=cost-chart | calc=bar | labels=1月,2月,3月,4月,5月,6月,7月,8月 | values=80,60,135,70,145,55,40,35 | area=140,440,1180,600 | value-range=0,160 | bar-width=90 -->
+      <rect x="205.5" y="520" width="90" height="80" fill="#1B4593"/>
+      <rect x="322.5" y="540" width="90" height="60" fill="#1B4593"/>
+      <rect x="439.5" y="465" width="90" height="135" fill="#266DE7"/>
+      <rect x="556.5" y="530" width="90" height="70" fill="#1B4593"/>
+      <rect x="673.5" y="455" width="90" height="145" fill="#266DE7"/>
+      <rect x="790.5" y="545" width="90" height="55" fill="#1B4593"/>
+      <rect x="907.5" y="560" width="90" height="40" fill="#1B4593"/>
+      <rect x="1024.5" y="565" width="90" height="35" fill="#1B4593"/>
+      <text x="250.5" y="514" font-size="14" fill="#0C2864" text-anchor="middle">80</text>
+      <text x="367.5" y="534" font-size="14" fill="#0C2864" text-anchor="middle">60</text>
+      <text x="484.5" y="459" font-size="14" fill="#0C2864" text-anchor="middle">135</text>
+      <text x="601.5" y="524" font-size="14" fill="#0C2864" text-anchor="middle">70</text>
+      <text x="718.5" y="449" font-size="14" fill="#0C2864" text-anchor="middle">145</text>
+      <text x="835.5" y="539" font-size="14" fill="#0C2864" text-anchor="middle">55</text>
+      <text x="952.5" y="554" font-size="14" fill="#0C2864" text-anchor="middle">40</text>
+      <text x="1069.5" y="559" font-size="14" fill="#0C2864" text-anchor="middle">35</text>
+      <text x="250.5" y="618" font-size="14" fill="#778495" text-anchor="middle">1 月</text>
+      <text x="367.5" y="618" font-size="14" fill="#778495" text-anchor="middle">2 月</text>
+      <text x="484.5" y="618" font-size="14" fill="#778495" text-anchor="middle">3 月</text>
+      <text x="601.5" y="618" font-size="14" fill="#778495" text-anchor="middle">4 月</text>
+      <text x="718.5" y="618" font-size="14" fill="#778495" text-anchor="middle">5 月</text>
+      <text x="835.5" y="618" font-size="14" fill="#778495" text-anchor="middle">6 月</text>
+      <text x="952.5" y="618" font-size="14" fill="#778495" text-anchor="middle">7 月</text>
+      <text x="1069.5" y="618" font-size="14" fill="#778495" text-anchor="middle">8 月</text>
+    </g>
+  </g>
+
+  <g id="cost-footnote" data-pptx-bounds="70 666 900 30">
+    <text x="70" y="680" font-size="14" fill="#778495">数据来源：本回归夹具内置样例值，仅用于管线自检，非真实业务数据。</text>
+  </g>
+</svg>

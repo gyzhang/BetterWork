@@ -4,9 +4,12 @@ import type {
   ExpertDetail,
   ExpertSummary,
   MaterialCandidate,
+  McpConnectionSummary,
   MemoryRecord,
   ModelProfileSummary,
+  SkillSummary,
 } from '@betterwork/agent-protocol';
+import { mcpConnectionSummarySchema, skillSummarySchema } from '@betterwork/agent-protocol';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -114,6 +117,9 @@ function renderExpertsPage(options?: {
   detail?: ExpertDetail;
   memories?: MemoryRecord[];
   models?: ModelProfileSummary[];
+  skills?: SkillSummary[];
+  mcpConnections?: McpConnectionSummary[];
+  skillsLoading?: boolean;
   workspaceId?: string;
   actions?: Partial<ExpertsState>;
 }) {
@@ -129,8 +135,9 @@ function renderExpertsPage(options?: {
   const { container } = render(
     <ExpertsPage
       state={state}
-      skills={[]}
-      mcpConnections={[]}
+      skills={options?.skills ?? []}
+      mcpConnections={options?.mcpConnections ?? []}
+      skillsLoading={options?.skillsLoading ?? false}
       memories={options?.memories ?? []}
       models={options?.models ?? []}
       materialCandidates={[]}
@@ -501,6 +508,51 @@ describe('ExpertsPage 的整页配置交互', () => {
 
     expect(await screen.findByRole('button', { name: '复制为用户专家' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: '编辑配置' })).toBeNull();
+  });
+
+  it('详情列出预设 Skill、内置工具和 MCP 工具名称', async () => {
+    const detail = detailOf(builtinExpert);
+    detail.revision.skillPreset = [{ skillId: 'skill-ppt', revisionId: 'skill-old' }];
+    detail.revision.builtinToolPolicy = { mode: 'allow-list', toolNames: ['web_search'] };
+    detail.revision.mcpToolBindings = [{ connectionId: 'mcp-1', toolId: 'fetch-page' }];
+    const skill = skillSummarySchema.parse({
+      id: 'skill-ppt',
+      name: 'PPT 生成',
+      description: '生成可编辑演示文稿',
+      sourceKind: 'builtin',
+      enabled: true,
+      currentRevisionId: 'skill-current',
+      trustStatus: 'trusted',
+      environmentStatus: 'ready',
+      blockedReasons: [],
+    });
+    const connection = mcpConnectionSummarySchema.parse({
+      id: 'mcp-1',
+      name: '研究服务',
+      transport: { kind: 'stdio', command: 'mcp-server' },
+      status: 'ready',
+      tools: [
+        {
+          id: 'fetch-page',
+          connectionId: 'mcp-1',
+          name: 'fetch_page',
+          description: '读取网页信息',
+          inputSchema: { type: 'object' },
+          schemaHash: 'schema-hash',
+          discoveredAt: 1,
+        },
+      ],
+      createdAt: 1,
+      updatedAt: 1,
+    });
+    renderExpertsPage({ detail, skills: [skill], mcpConnections: [connection] });
+    fireEvent.click(screen.getByRole('button', { name: '详情' }));
+
+    expect(await screen.findByText('生成可编辑演示文稿')).toBeTruthy();
+    expect(screen.getByText('绑定固定修订')).toBeTruthy();
+    expect(screen.getByText('搜索网络资料')).toBeTruthy();
+    expect(screen.getByText('研究服务 · fetch_page')).toBeTruthy();
+    expect(screen.getByText('读取网页信息')).toBeTruthy();
   });
 
   it('内置专家卡片只提供复制动作，点击后刷新目录', async () => {

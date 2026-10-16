@@ -304,7 +304,10 @@ export class SkillRepository {
     return { lockHash: row.lock_hash, snapshotIds: parseSnapshotIds(row.snapshot_ids_json) };
   }
 
-  /** 按当前内容、运行配置和依赖锁恢复用户最近一次选定的快照。 */
+  /**
+   * 按当前修订优先恢复快照选择；当前修订没有选择时，允许复用相同 profile/依赖锁的旧修订选择。
+   * 返回值只用于恢复待确认的选择，不代表旧修订的执行授权可用于当前修订。
+   */
   getLatestDependencySelection(
     skillId: string,
     revisionId: string,
@@ -317,13 +320,15 @@ export class SkillRepository {
          FROM skill_dependency_selections AS selection
          JOIN skill_trust_grants AS grant_record ON grant_record.id = selection.grant_id
          WHERE grant_record.skill_id = ?
-           AND grant_record.revision_id = ?
+           AND grant_record.revoked_at IS NULL
            AND grant_record.profile_hash = ?
            AND selection.lock_hash = ?
-         ORDER BY grant_record.granted_at DESC, grant_record.id DESC
+         ORDER BY CASE WHEN grant_record.revision_id = ? THEN 0 ELSE 1 END,
+                  grant_record.granted_at DESC,
+                  grant_record.id DESC
          LIMIT 1`,
       )
-      .get(skillId, revisionId, profileHash, lockHash) as
+      .get(skillId, profileHash, lockHash, revisionId) as
       Pick<DependencySelectionRow, 'snapshot_ids_json'> | undefined;
     return row ? parseSnapshotIds(row.snapshot_ids_json) : undefined;
   }

@@ -3923,8 +3923,34 @@ describe('RunService', () => {
     ).toEqual(['calculator']);
   });
 
-  it('routes an Expert TaskContext to its pinned tool policy before a Run starts', async () => {
+  it('rejects a model tool call outside the Expert policy and lets the Run continue', async () => {
     const fixture = await createFixture();
+    const offeredTools: string[][] = [];
+    const feedbackMessages: string[] = [];
+    const providerSpy = vi
+      .spyOn(FakeModelProvider.prototype, 'stream')
+      .mockImplementation((request) => {
+        offeredTools.push(request.tools.map((tool) => tool.name));
+        const lastMessage = request.messages.at(-1);
+        if (lastMessage?.role === 'tool') {
+          feedbackMessages.push(lastMessage.content);
+          return (async function* () {
+            yield { type: 'text-delta' as const, delta: '收到工具不可用反馈后继续回答。' };
+            yield { type: 'done' as const };
+          })();
+        }
+        return (async function* () {
+          yield {
+            type: 'tool-call' as const,
+            toolCall: {
+              id: 'call-denied-calculator',
+              name: 'calculator',
+              input: { expression: '1 + 1' },
+            },
+          };
+          yield { type: 'done' as const };
+        })();
+      });
     const expert = fixture.store.experts.create({
       sourceKind: 'user',
       revision: {
@@ -3950,29 +3976,51 @@ describe('RunService', () => {
       skillBindings: [],
     });
 
-    const service = createService(fixture);
-    const runId = service.start({
-      taskId: fixture.taskId,
-      sessionId: fixture.sessionId,
-      prompt: '计算: 1 + 1',
-      taskContextRevisionId: context.id,
-      expectedTaskContextRevision: context.revision,
-    });
-    await waitForCompletion(fixture, runId);
+    try {
+      const service = createService(fixture);
+      const runId = service.start({
+        taskId: fixture.taskId,
+        sessionId: fixture.sessionId,
+        prompt: '计算: 1 + 1',
+        taskContextRevisionId: context.id,
+        expectedTaskContextRevision: context.revision,
+      });
+      await waitForCompletion(fixture, runId);
 
-    expect(statusOf(fixture, runId)).toBe('failed');
-    expect(fixture.store.runContextSnapshots.get(runId)).toMatchObject({
-      taskContextRevisionId: context.id,
-      expertId: expert.id,
-      expertRevisionId: expert.revision.id,
-      modelReference: { mode: 'application-default' },
-      builtinToolPolicy: { mode: 'allow-list', toolNames: ['read_text_file'] },
-      mcpToolBindings: [],
-    });
-    expect(fixture.store.runs.listEvents(runId).at(-1)).toMatchObject({
-      type: 'run.failed',
-      error: 'Unknown tool: calculator',
-    });
+      const events = fixture.store.runs.listEvents(runId);
+      expect(offeredTools).toEqual([['read_text_file'], ['read_text_file']]);
+      expect(feedbackMessages[0]).toContain('calculator');
+      expect(statusOf(fixture, runId)).toBe('completed');
+      expect(fixture.store.runContextSnapshots.get(runId)).toMatchObject({
+        taskContextRevisionId: context.id,
+        expertId: expert.id,
+        expertRevisionId: expert.revision.id,
+        modelReference: { mode: 'application-default' },
+        builtinToolPolicy: { mode: 'allow-list', toolNames: ['read_text_file'] },
+        mcpToolBindings: [],
+      });
+      expect(events.filter((event) => event.type === 'tool.failed')).toMatchObject([
+        {
+          toolCallId: 'call-denied-calculator',
+          error: expect.stringContaining('calculator'),
+          diagnostic: {
+            kind: 'unknown-tool',
+            source: 'model-provider-output',
+            requestedName: 'calculator',
+            availableToolNames: ['read_text_file'],
+            modelProviderId: 'fake',
+            round: 0,
+          },
+        },
+      ]);
+      expect(events.some((event) => event.type === 'tool.started')).toBe(false);
+      expect(events.at(-1)).toMatchObject({
+        type: 'run.completed',
+        finalContent: '收到工具不可用反馈后继续回答。',
+      });
+    } finally {
+      providerSpy.mockRestore();
+    }
   });
 
   it('creates a notification with a task target when a run completes', async () => {

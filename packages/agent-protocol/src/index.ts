@@ -61,6 +61,20 @@ export const agentRuntimeEventSchema = z.discriminatedUnion('type', [
     type: z.literal('tool.failed'),
     toolCallId: z.string(),
     error: z.string(),
+    diagnostic: z
+      .object({
+        kind: z.literal('unknown-tool'),
+        source: z.literal('model-provider-output'),
+        requestedName: z.string(),
+        availableToolNames: z.array(z.string()),
+        modelProviderId: z.string(),
+        round: z.number().int().nonnegative(),
+        providerRequestId: z.string().optional(),
+        providerResponseId: z.string().optional(),
+        responseModel: z.string().optional(),
+      })
+      .strict()
+      .optional(),
   }),
   eventBaseSchema.extend({ type: z.literal('run.completed'), finalContent: z.string() }),
   eventBaseSchema.extend({ type: z.literal('run.failed'), error: z.string() }),

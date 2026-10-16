@@ -179,6 +179,10 @@ const SURFACE_SHELL_OWNERS: readonly { selector: string; reason: string }[] = [
   { selector: '.memory-conflict-bodies > div', reason: '冲突两侧内容并排预览，非目录卡片' },
   { selector: '.memory-policy-pinned', reason: '记忆政策的固定状态容器' },
   { selector: '.message.assistant .markdown-preview', reason: 'MessageBlock 内文档去外壳排版' },
+  {
+    selector: '.process-narration-entry .markdown-preview',
+    reason: '过程旁白正文复用 MarkdownPreview 并移除文档外壳',
+  },
   { selector: '.nav-item', reason: 'NavItem 基座' },
   { selector: '.notification-badge', reason: '未读数图形标识' },
   { selector: '.popover-menu', reason: 'PopoverMenu 基座' },

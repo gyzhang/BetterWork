@@ -1,4 +1,342 @@
 {
   "formatVersion": 1,
-  "skills": []
+  "skills": [
+    {
+      "skillId": "ppt-generation-expert",
+      "resourceName": "ppt-generation-expert",
+      "name": "PPT 生成（中电金信模板）",
+      "description": "使用中电金信公司模板生成新的可编辑 PowerPoint 演示文稿；需要 PPT Master 6.6.0 工具链。",
+      "contentHash": "0306649f6284bb613136232e47d6646540bb8b554019517697c54c3e91fd3a8c",
+      "originalVersion": "v20261007.5",
+      "profileHash": "c2017a5f672f5c394d46d218ce590ecad98d4fe66f939f60f4333c51c203142b",
+      "dependencyFingerprint": "3add3c7f42b8e386bdb25effcf05499cc56dacf208261b5a8b4eca3b326fbee1",
+      "scopeHash": "d27a3629e2aaa785e9e1c965cc18deee50a786439953b5ccf714a8af9f54c928",
+      "profile": {
+        "commands": [
+          {
+            "commandId": "project-init",
+            "label": "初始化 PPT 项目",
+            "argumentSchema": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "project_name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 100,
+                  "pattern": "^(?!-)(?!\\.{1,2}$)[^/\\\\]+$"
+                }
+              },
+              "required": ["project_name"]
+            },
+            "timeoutMs": 300000,
+            "execution": {
+              "entrypoint": {
+                "scope": "toolchain",
+                "runtime": "managed-python",
+                "toolchainId": "ppt-master",
+                "path": "skills/ppt-master/scripts/project_manager.py"
+              },
+              "pathArguments": [],
+              "argv": [
+                {
+                  "kind": "literal",
+                  "value": "init"
+                },
+                {
+                  "kind": "argument",
+                  "name": "project_name"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--dir"
+                },
+                {
+                  "kind": "work-directory"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--quick-generate"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--format"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ppt169"
+                }
+              ],
+              "outputs": []
+            }
+          },
+          {
+            "commandId": "icon-sync",
+            "label": "同步图标",
+            "argumentSchema": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "project_dir": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "icons": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "maxItems": 100
+                }
+              },
+              "required": ["project_dir", "icons"]
+            },
+            "timeoutMs": 300000,
+            "execution": {
+              "entrypoint": {
+                "scope": "toolchain",
+                "runtime": "managed-python",
+                "toolchainId": "ppt-master",
+                "path": "skills/ppt-master/scripts/icon_sync.py"
+              },
+              "pathArguments": [
+                {
+                  "argumentName": "project_dir",
+                  "scope": "work",
+                  "access": "read-write"
+                }
+              ],
+              "argv": [
+                {
+                  "kind": "argument",
+                  "name": "project_dir"
+                },
+                {
+                  "kind": "argument",
+                  "name": "icons",
+                  "repeat": true
+                }
+              ],
+              "outputs": []
+            }
+          },
+          {
+            "commandId": "svg-export",
+            "label": "检查并导出 SVG",
+            "argumentSchema": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "project_dir": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": ["project_dir"]
+            },
+            "timeoutMs": 300000,
+            "execution": {
+              "entrypoint": {
+                "scope": "skill",
+                "runtime": "managed-python",
+                "path": "scripts/svg_native_export.py"
+              },
+              "pathArguments": [
+                {
+                  "argumentName": "project_dir",
+                  "scope": "work",
+                  "access": "read-write"
+                }
+              ],
+              "argv": [
+                {
+                  "kind": "argument",
+                  "name": "project_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--output"
+                },
+                {
+                  "kind": "output",
+                  "outputId": "pptx"
+                }
+              ],
+              "outputs": [
+                {
+                  "outputId": "pptx",
+                  "source": {
+                    "kind": "generated",
+                    "relativePath": ".attempts/{executionId}/betterwork-output.pptx"
+                  },
+                  "extension": "pptx",
+                  "mimeType": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                  "validation": {
+                    "structure": "not-checked",
+                    "visual": "not-checked",
+                    "manualEdit": "not-checked"
+                  }
+                }
+              ]
+            },
+            "runtimeInstruction": "使用本次工具返回的 outputIds 与执行记录继续流程；不要猜测历史导出目录或复用旧路径。"
+          },
+          {
+            "commandId": "template-merge",
+            "label": "合并公司模板",
+            "argumentSchema": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "source_pptx": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "template_path": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "config_path": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": ["source_pptx", "template_path", "config_path"]
+            },
+            "timeoutMs": 300000,
+            "execution": {
+              "entrypoint": {
+                "scope": "skill",
+                "runtime": "managed-python",
+                "path": "scripts/merge_into_template.py"
+              },
+              "pathArguments": [
+                {
+                  "argumentName": "source_pptx",
+                  "scope": "work",
+                  "access": "read"
+                },
+                {
+                  "argumentName": "template_path",
+                  "scope": "skill",
+                  "access": "read"
+                },
+                {
+                  "argumentName": "config_path",
+                  "scope": "work",
+                  "access": "read"
+                }
+              ],
+              "argv": [
+                {
+                  "kind": "argument",
+                  "name": "source_pptx"
+                },
+                {
+                  "kind": "argument",
+                  "name": "template_path"
+                },
+                {
+                  "kind": "output",
+                  "outputId": "merged-pptx"
+                },
+                {
+                  "kind": "argument",
+                  "name": "config_path"
+                }
+              ],
+              "outputs": [
+                {
+                  "outputId": "merged-pptx",
+                  "source": {
+                    "kind": "generated",
+                    "relativePath": ".attempts/{executionId}/merged.pptx"
+                  },
+                  "extension": "pptx",
+                  "mimeType": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                  "validation": {
+                    "structure": "not-checked",
+                    "visual": "not-checked",
+                    "manualEdit": "not-checked"
+                  }
+                }
+              ]
+            },
+            "runtimeInstruction": "template_path 指向本 Skill 的只读资源，使用 assets/ 开头的包内相对路径。"
+          },
+          {
+            "commandId": "pptx-validate",
+            "label": "校验 PPTX",
+            "argumentSchema": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "pptx_path": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": ["pptx_path"]
+            },
+            "timeoutMs": 300000,
+            "execution": {
+              "entrypoint": {
+                "scope": "skill",
+                "runtime": "managed-python",
+                "path": "scripts/validate_pptx.py"
+              },
+              "pathArguments": [
+                {
+                  "argumentName": "pptx_path",
+                  "scope": "work",
+                  "access": "read"
+                }
+              ],
+              "argv": [
+                {
+                  "kind": "argument",
+                  "name": "pptx_path"
+                }
+              ],
+              "outputs": [
+                {
+                  "outputId": "validated-pptx",
+                  "source": {
+                    "kind": "argument",
+                    "argumentName": "pptx_path"
+                  },
+                  "extension": "pptx",
+                  "mimeType": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                  "validation": {
+                    "structure": "passed",
+                    "visual": "not-checked",
+                    "manualEdit": "not-checked"
+                  }
+                }
+              ]
+            },
+            "requireCompleteStdout": true,
+            "runtimeInstruction": "校验命令成功并返回 outputIds 后，才可登记对应的 PPTX 成果。"
+          }
+        ],
+        "environmentRequirements": [],
+        "pythonRequirement": "3.12",
+        "dependencyBundle": {
+          "id": "ppt-generation-expert-darwin-arm64-cp312",
+          "lockPath": "runtime/locks/ppt-generation-expert-darwin-arm64-cp312.json",
+          "wheelhousePath": "runtime/wheelhouse"
+        },
+        "toolchainRequirements": [
+          {
+            "id": "ppt-master",
+            "name": "PPT Master",
+            "environmentVariable": "PPTM_HOME",
+            "versionHint": "6.6.0",
+            "expectedCommit": "680de11f1bef4628b68d5daad9dffec569fbd51f"
+          }
+        ]
+      }
+    }
+  ]
 }

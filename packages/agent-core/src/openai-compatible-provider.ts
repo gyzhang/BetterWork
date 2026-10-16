@@ -51,6 +51,12 @@ const finishReasonOf = (wireValue: string): ModelFinishReason =>
 const tokenCount = (value: unknown): number | undefined =>
   typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined;
 
+const metadataString = (value: unknown): string | undefined => {
+  if (typeof value !== 'string') return undefined;
+  const normalized = value.trim();
+  return normalized.length > 0 && normalized.length <= 200 ? normalized : undefined;
+};
+
 /** usage 只搬运上游真实返回的数字，绝不把 code points 之类推算值冒充成 token。 */
 const usageOf = (usage: StreamUsage | null | undefined): ModelUsage | undefined => {
   if (!usage) return undefined;
@@ -74,6 +80,8 @@ interface StreamUsage {
 }
 
 interface StreamPayload {
+  id?: unknown;
+  model?: unknown;
   choices?: Array<{
     finish_reason?: unknown;
     delta?: {
@@ -183,12 +191,19 @@ export class OpenAICompatibleProvider implements ModelProvider {
     if (!response.ok) throw new Error(`模型请求失败（HTTP ${response.status}）`);
     if (!response.body) throw new Error('模型服务没有返回流式响应');
 
+    const providerRequestId =
+      metadataString(response.headers.get('x-request-id')) ??
+      metadataString(response.headers.get('request-id')) ??
+      metadataString(response.headers.get('x-bce-request-id'));
+
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
     let completed = false;
     let wireFinishReason: string | undefined;
     let usage: ModelUsage | undefined;
+    let providerResponseId: string | undefined;
+    let responseModel: string | undefined;
     const toolCalls = new Map<number, { id: string; name: string; arguments: string }>();
     const emitLine = (line: string): ModelStreamChunk[] => {
       if (!line.startsWith('data:')) return [];
@@ -199,6 +214,8 @@ export class OpenAICompatibleProvider implements ModelProvider {
         return [];
       }
       const chunk = JSON.parse(data) as StreamPayload;
+      providerResponseId ??= metadataString(chunk.id);
+      responseModel ??= metadataString(chunk.model);
       const choice = chunk.choices?.[0];
       const delta = choice?.delta;
       const parsedUsage = usageOf(chunk.usage);
@@ -269,6 +286,9 @@ export class OpenAICompatibleProvider implements ModelProvider {
       type: 'done',
       ...(wireFinishReason === undefined ? {} : { finishReason: finishReasonOf(wireFinishReason) }),
       ...(usage === undefined ? {} : { usage }),
+      ...(providerRequestId === undefined ? {} : { providerRequestId }),
+      ...(providerResponseId === undefined ? {} : { providerResponseId }),
+      ...(responseModel === undefined ? {} : { responseModel }),
     };
   }
 

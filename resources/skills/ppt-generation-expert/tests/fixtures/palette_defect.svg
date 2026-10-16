@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+  <!-- 配色校验夹具（缺陷）——verify_palette.py 的阴性测试：
+       故意使用色板外颜色 #EF9F27（琥珀）与 #854F0B（深琥珀），模拟"写页面时自创一个
+       看起来更柔和的颜色"。2026-09-16 真实事故：中风险/第二层强调误用琥珀，7 处越板。
+       期望：退出码 1，报出两处 VIOLATION；导出闸门拒绝该工作区。 -->
+  <rect x="0" y="0" width="1280" height="720" fill="#FFFFFF" id="page-bg" data-pptx-role="background"/>
+  <g id="palette-defect-card" data-pptx-bounds="70 200 760 300">
+    <rect x="70" y="200" width="760" height="300" rx="8" fill="#FFFFFF" stroke="#854F0B" stroke-width="1.5"/>
+    <path d="M76 200.25A8 8 0 0 0 70 208V492A8 8 0 0 0 76 499.75Z" fill="#EF9F27"/>
+    <text x="92" y="228" font-size="16" font-weight="bold" fill="#854F0B">配色越板夹具</text>
+    <text x="92" y="262" font-size="14" fill="#0C2864">本页只有一处颜色问题：自创了一个色板外颜色。</text>
+  </g>
+</svg>

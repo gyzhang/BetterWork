@@ -836,6 +836,128 @@ describe('SkillRepository', () => {
       expect(result).toEqual(['snap-a', 'snap-b']);
     });
 
+    it('restores a prior active revision selection for the same profile and lock', () => {
+      const store = openStore();
+      const db = dbOf(store);
+      seedSkill(db, {
+        skillId: 'skill-1',
+        revisionId: 'rev-1',
+        profileId: 'prof-1',
+        profileHash: 'ph-1',
+        trustPreference: 'trusted',
+        grantRevisionId: 'rev-1',
+        grantProfileHash: 'ph-1',
+      });
+      store.skills.saveDependencySelection('grant-1', 'lock-hash-1', ['snap-old']);
+
+      const currentRevisionId = store.skills.saveRevision({
+        id: 'rev-2',
+        skillId: 'skill-1',
+        contentHash: 'content-hash-2',
+        resourceKey: 'test-skill',
+        frontmatter: {},
+      });
+
+      const result = store.skills.getLatestDependencySelection(
+        'skill-1',
+        currentRevisionId,
+        'ph-1',
+        'lock-hash-1',
+      );
+
+      expect(result).toEqual(['snap-old']);
+      expect(db.prepare('SELECT count(*) AS count FROM skill_trust_grants').get()).toMatchObject({
+        count: 1,
+      });
+    });
+
+    it('prefers the current revision selection and excludes revoked or mismatched old selections', () => {
+      const store = openStore();
+      const db = dbOf(store);
+      seedSkill(db, {
+        skillId: 'skill-1',
+        revisionId: 'rev-1',
+        profileId: 'prof-1',
+        profileHash: 'ph-1',
+        trustPreference: 'trusted',
+        grantRevisionId: 'rev-1',
+        grantProfileHash: 'ph-1',
+      });
+      store.skills.saveDependencySelection('grant-1', 'lock-hash-1', ['snap-old']);
+      exec(db, 'UPDATE skill_trust_grants SET granted_at = ? WHERE id = ?', [
+        Number.MAX_SAFE_INTEGER,
+        'grant-1',
+      ]);
+
+      const currentRevisionId = store.skills.saveRevision({
+        id: 'rev-2',
+        skillId: 'skill-1',
+        contentHash: 'content-hash-2',
+        resourceKey: 'test-skill',
+        frontmatter: {},
+      });
+      const currentGrantId = store.skills.saveTrustGrant({
+        id: 'grant-current',
+        skillId: 'skill-1',
+        revisionId: currentRevisionId,
+        profileHash: 'ph-1',
+        dependencyFingerprint: 'dep-fingerprint',
+        scopeHash: 'scope-hash',
+        source: 'builtin-release',
+      });
+      exec(db, 'UPDATE skill_trust_grants SET granted_at = ? WHERE id = ?', [1, currentGrantId]);
+      store.skills.saveDependencySelection(currentGrantId, 'lock-hash-1', ['snap-current']);
+
+      expect(
+        store.skills.getLatestDependencySelection(
+          'skill-1',
+          currentRevisionId,
+          'ph-1',
+          'lock-hash-1',
+        ),
+      ).toEqual(['snap-current']);
+
+      db.prepare('DELETE FROM skill_dependency_selections WHERE grant_id = ?').run(currentGrantId);
+      expect(
+        store.skills.getLatestDependencySelection(
+          'skill-1',
+          currentRevisionId,
+          'ph-1',
+          'lock-hash-1',
+        ),
+      ).toEqual(['snap-old']);
+
+      expect(
+        store.skills.getLatestDependencySelection(
+          'skill-1',
+          currentRevisionId,
+          'ph-2',
+          'lock-hash-1',
+        ),
+      ).toBeUndefined();
+      expect(
+        store.skills.getLatestDependencySelection(
+          'skill-1',
+          currentRevisionId,
+          'ph-1',
+          'lock-hash-2',
+        ),
+      ).toBeUndefined();
+
+      exec(db, 'UPDATE skill_trust_grants SET revoked_at = ? WHERE id = ?', [
+        Date.now(),
+        'grant-1',
+      ]);
+      expect(
+        store.skills.getLatestDependencySelection(
+          'skill-1',
+          currentRevisionId,
+          'ph-1',
+          'lock-hash-1',
+        ),
+      ).toBeUndefined();
+    });
+
     it('returns undefined when no matching selection exists', () => {
       const store = openStore();
       const db = dbOf(store);

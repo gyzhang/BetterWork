@@ -716,6 +716,16 @@ describe('区块头基座纪律', () => {
         match: /^\.message\.assistant \.markdown-preview h[1-6]$/,
         reason: '同上：对话里的 Markdown 成果排版',
       },
+      {
+        match:
+          /^\.process-narration-entry \.markdown-preview h[1-3](,\s*\.process-narration-entry \.markdown-preview h[1-3])*$/,
+        reason: '过程旁白中的模型消息正文沿用 Markdown 标题排版',
+      },
+      {
+        match:
+          /^(?:@media \(prefers-reduced-motion: reduce\) )?(?:\.process-narration-preview\.is-streaming,\s*)?\.process-narration-entry\[data-streaming='true'\] \.markdown-preview :is\(p, h1, h2, h3, li, blockquote, pre\)$/,
+        reason: '活跃过程旁白的 Markdown 正文使用流式状态色',
+      },
     ];
     const offenders = declarations
       .filter((declaration) => /\bh[1-6]\b/.test(declaration.selector))

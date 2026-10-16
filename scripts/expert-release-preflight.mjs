@@ -51,13 +51,22 @@ const collectFiles = async (root, directory = root) => {
 };
 
 const hashSkill = async (root, label) => {
-  const files = (await collectFiles(root)).sort((left, right) => left.localeCompare(right));
+  const files = (await collectFiles(root))
+    .filter((file) => {
+      const relativePath = path.relative(root, file);
+      return (
+        relativePath !== 'betterwork.skill.json' &&
+        !relativePath.startsWith(path.join('runtime', 'wheelhouse') + path.sep)
+      );
+    })
+    .sort((left, right) => path.relative(root, left).localeCompare(path.relative(root, right)));
   if (!files.some((file) => path.relative(root, file) === 'SKILL.md')) {
     fail(`missing SKILL.md: ${label}`);
   }
   const hash = createHash('sha256');
   for (const file of files) {
     const relativePath = path.relative(root, file);
+    // Keep this aligned with SkillService: package metadata and wheels have separate integrity checks.
     hash
       .update(relativePath)
       .update('\0')

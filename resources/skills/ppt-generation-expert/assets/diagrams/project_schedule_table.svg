@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="Microsoft YaHei" data-pptx-page-role="content">
+  <!-- diagram/project_schedule_table — 项目排期表（表头×表头共同定位每个事实 + 期次驱动条长）
+       用途：按月/周排布任务起止与进度，兼作交付计划表（任务行 × 期次列）。
+       边界：只表达阶段区间 → diagram/milestone_chart；任务多、需资源泳道 → chart/gantt_chart。
+       结构规则：左列任务（含责任人），右侧期次列；条块必须按期次格线对齐，不得跨格半格；
+                 已完成/进行中/未开始三段视觉互斥；进度用叠加条表达，不用文字替代；
+                 条块内不放任务名（任务名在左列），避免同一信息两处出现。
+       改法：期次列宽 140px、起点 x=370；第 i 期起、跨 n 期的条 x = 370 + i×140 + 8，宽 = n×140 − 16；
+             行高 54px（首行 y=244）；条高 38px，条 y = 行 y + 8；进度叠加条宽 = 条宽 × 进度百分比。
+       几何口径：本页条块由期次索引驱动（公式见上），属 formula-verify 类，不走 chart-plot-area 标记。
+       分组：表格 / 汇总片 / 图例 / 脚注各自成组，沿 y 轴顺序排列且互不重叠。 -->
+  <rect id="page-background" x="0" y="0" width="1280" height="720" fill="#FFFFFF" data-pptx-role="background"/>
+
+  <g id="summary-band" data-pptx-bounds="70 135 1140 50">
+    <rect x="70" y="135" width="1140" height="50" rx="8" fill="#E4E6EA"/>
+    <path d="M76 135.25A8 8 0 0 0 70 143V177A8 8 0 0 0 76 184.75Z" fill="#1B4593"/>
+    <text x="92" y="159" font-size="14" fill="#0C2864">总工期 6 个月：平台开发为关键路径（9-11 月，当前 60%），场景接入与之并行 2 个月。</text>
+    <text x="92" y="177" font-size="14" fill="#0C2864">联调与上线压在 12-1 月，缓冲仅 3 周；若平台开发延期，上线窗口将整体后移。</text>
+  </g>
+
+  <g id="ps-table" data-pptx-bounds="70 194 1140 380">
+    <rect x="370" y="200" width="140" height="368" fill="#E4E6EA"/>
+    <line x1="370" y1="200" x2="370" y2="568" stroke="#778495" stroke-width="1"/>
+    <line x1="510" y1="200" x2="510" y2="568" stroke="#E4E6EA" stroke-width="1"/>
+    <line x1="650" y1="200" x2="650" y2="568" stroke="#E4E6EA" stroke-width="1"/>
+    <line x1="790" y1="200" x2="790" y2="568" stroke="#E4E6EA" stroke-width="1"/>
+    <line x1="930" y1="200" x2="930" y2="568" stroke="#E4E6EA" stroke-width="1"/>
+    <line x1="1070" y1="200" x2="1070" y2="568" stroke="#E4E6EA" stroke-width="1"/>
+    <line x1="1210" y1="200" x2="1210" y2="568" stroke="#778495" stroke-width="1"/>
+    <line x1="70" y1="244" x2="1210" y2="244" stroke="#778495" stroke-width="1"/>
+    <line x1="70" y1="298" x2="1210" y2="298" stroke="#E4E6EA" stroke-width="1"/>
+    <line x1="70" y1="352" x2="1210" y2="352" stroke="#E4E6EA" stroke-width="1"/>
+    <line x1="70" y1="406" x2="1210" y2="406" stroke="#E4E6EA" stroke-width="1"/>
+    <line x1="70" y1="460" x2="1210" y2="460" stroke="#E4E6EA" stroke-width="1"/>
+    <line x1="70" y1="514" x2="1210" y2="514" stroke="#E4E6EA" stroke-width="1"/>
+    <line x1="70" y1="568" x2="1210" y2="568" stroke="#778495" stroke-width="1"/>
+    <rect x="70" y="200" width="300" height="44" fill="#0C2864"/>
+    <rect x="370" y="200" width="840" height="44" fill="#0C2864"/>
+    <text x="90" y="228" font-size="14" font-weight="bold" fill="#FFFFFF">任务</text>
+    <text x="440" y="228" font-size="14" font-weight="bold" fill="#FFFFFF" text-anchor="middle">9 月</text>
+    <text x="580" y="228" font-size="14" font-weight="bold" fill="#FFFFFF" text-anchor="middle">10 月</text>
+    <text x="720" y="228" font-size="14" font-weight="bold" fill="#FFFFFF" text-anchor="middle">11 月</text>
+    <text x="860" y="228" font-size="14" font-weight="bold" fill="#FFFFFF" text-anchor="middle">12 月</text>
+    <text x="1000" y="228" font-size="14" font-weight="bold" fill="#FFFFFF" text-anchor="middle">次年 1 月</text>
+    <text x="1140" y="228" font-size="14" font-weight="bold" fill="#FFFFFF" text-anchor="middle">次年 2 月</text>
+    <g id="ps-rows">
+      <text x="90" y="270" font-size="14" fill="#0C2864">需求调研与口径对齐</text>
+      <text x="90" y="288" font-size="13" fill="#778495">责任：业务分析 2 人</text>
+      <text x="90" y="324" font-size="14" fill="#0C2864">平台开发</text>
+      <text x="90" y="342" font-size="13" fill="#778495">责任：研发 6 人（关键路径）</text>
+      <text x="90" y="378" font-size="14" fill="#0C2864">场景接入</text>
+      <text x="90" y="396" font-size="13" fill="#778495">责任：实施 4 人</text>
+      <text x="90" y="432" font-size="14" fill="#0C2864">联调测试</text>
+      <text x="90" y="450" font-size="13" fill="#778495">责任：测试 3 人</text>
+      <text x="90" y="486" font-size="14" fill="#0C2864">上线验收</text>
+      <text x="90" y="504" font-size="13" fill="#778495">责任：项目经理 1 人</text>
+      <text x="90" y="540" font-size="14" fill="#0C2864">运维移交</text>
+      <text x="90" y="558" font-size="13" fill="#778495">责任：运维 2 人</text>
+    </g>
+    <g id="ps-bars">
+      <rect x="378" y="252" width="124" height="38" rx="4" fill="#1B4593"/>
+      <text x="390" y="276" font-size="13" fill="#FFFFFF">100%</text>
+      <rect x="378" y="306" width="404" height="38" rx="4" fill="#266DE7"/>
+      <rect x="378" y="306" width="242" height="38" rx="4" fill="#0C2864"/>
+      <text x="770" y="330" font-size="13" fill="#FFFFFF" text-anchor="end">60%</text>
+      <rect x="518" y="360" width="404" height="38" rx="4" fill="#266DE7"/>
+      <rect x="518" y="360" width="162" height="38" rx="4" fill="#0C2864"/>
+      <text x="910" y="384" font-size="13" fill="#FFFFFF" text-anchor="end">40%</text>
+      <rect x="798" y="414" width="264" height="38" rx="4" fill="#FFFFFF" stroke="#778495" stroke-width="1" stroke-dasharray="6 4"/>
+      <text x="812" y="438" font-size="13" fill="#778495">未开始</text>
+      <rect x="938" y="468" width="124" height="38" rx="4" fill="#FFFFFF" stroke="#778495" stroke-width="1" stroke-dasharray="6 4"/>
+      <text x="952" y="492" font-size="13" fill="#778495">未开始</text>
+      <rect x="1078" y="522" width="124" height="38" rx="4" fill="#FFFFFF" stroke="#778495" stroke-width="1" stroke-dasharray="6 4"/>
+      <text x="1092" y="546" font-size="13" fill="#778495">未开始</text>
+    </g>
+  </g>
+
+  <g id="ps-chips" data-pptx-bounds="70 578 1140 44">
+    <rect x="70" y="582" width="360" height="36" rx="8" fill="#E4E6EA"/>
+    <text x="88" y="606" font-size="14" fill="#0C2864">已完成 1 项 / 进行中 2 项 / 未开始 3 项</text>
+    <rect x="450" y="582" width="360" height="36" rx="8" fill="#E4E6EA"/>
+    <text x="468" y="606" font-size="14" fill="#0C2864">整体进度 42%（按任务加权）</text>
+    <rect x="830" y="582" width="380" height="36" rx="8" fill="#E4E6EA"/>
+    <text x="848" y="606" font-size="14" fill="#0C2864">关键路径余量 3 周，无浮动时间</text>
+  </g>
+
+  <g id="ps-legend" data-pptx-bounds="70 632 1140 26">
+    <rect x="70" y="640" width="36" height="14" rx="3" fill="#1B4593"/>
+    <text x="116" y="652" font-size="14" fill="#778495">已完成</text>
+    <rect x="200" y="640" width="36" height="14" rx="3" fill="#266DE7"/>
+    <rect x="200" y="640" width="20" height="14" rx="3" fill="#0C2864"/>
+    <text x="246" y="652" font-size="14" fill="#778495">进行中（深色为已完部分）</text>
+    <rect x="470" y="640" width="36" height="14" rx="3" fill="#FFFFFF" stroke="#778495" stroke-width="1" stroke-dasharray="6 4"/>
+    <text x="516" y="652" font-size="14" fill="#778495">未开始</text>
+  </g>
+
+  <g id="ps-footnote" data-pptx-bounds="70 666 900 30">
+    <text x="70" y="690" font-size="14" fill="#778495">浅蓝列为当前期次；条块严格对齐期次格线，任务名只出现在左列。</text>
+  </g>
+</svg>

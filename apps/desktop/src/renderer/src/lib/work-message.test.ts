@@ -43,6 +43,15 @@ describe('work Run projection', () => {
       answer: undefined,
     });
   });
+  it('ignores a repeated message.started event for the same narration', () => {
+    expect(
+      projectWorkRun([
+        event({ id: 'started-1', sequence: 1, type: 'message.started', messageId: 'm' }),
+        event({ id: 'started-2', sequence: 2, type: 'message.started', messageId: 'm' }),
+        event({ ...delta, sequence: 3 }),
+      ]).narrations,
+    ).toEqual([{ messageId: 'm', content: '中间检索说明', streaming: true }]);
+  });
   it('failure retains partial text and its failure reason without a saveable result', () => {
     expect(
       projectWorkRun([

@@ -131,7 +131,7 @@ Office 结果 Schema 保留片段类型。CSV 以读取片段的物理行范围�
 
 结构化账本仍按精确 `sourceId` 对应本次工具调用实际返回的片段。读取足迹的 locator、材料哈希和 excerptHash 仍依据原始解析片段记录；结构化核验不改变材料采用声明、Evidence、只读源文件或 Run 终态语义。
 
-KnowledgeAudit 继续在工具回调事务内登记精确来源，适配器只核验归属并复用；成果登记/采用声明和 Skill 运行仍由原回调负责。MCP 不透明结果、未绑定时不登记、网页摘录与哈希、各类材料身份匹配保持。非法已适配结果或缺失/未知工具名给出不含原正文的契约错误，再由既有编排 catch 收敛为失败；已持久化工具事件保留。范围与证据见 [C3 说明](reviews/2026-10-10-tool-result-adapters.md)。
+KnowledgeAudit 继续在工具回调事务内登记精确来源，适配器只核验归属并复用；成果登记/采用声明和 Skill 运行仍由原回调负责。MCP 不透明结果、未绑定时不登记、网页摘录与哈希、各类材料身份匹配保持。已完成工具结果若违反适配契约，或结果适配器无法识别工具名，仍给出不含原正文的契约错误，再由既有编排 catch 收敛为 Run 失败；已持久化工具事件保留。范围与证据见 [C3 说明](reviews/2026-10-10-tool-result-adapters.md)。
 
 ### 3.5 Run 事件消费与终态协调
 
@@ -186,6 +186,8 @@ interface AgentEngine {
 ```
 
 `workspacePath` 由 Application 层从 Workspace 注入，是 Tool 的文件系统沙箱边界来源；`messages` 用于携带既有历史，首版执行链路尚未把完整历史作为上下文传入；`maxToolRounds` 默认 20，超限以 `run.failed` 终止而不是静默截断。
+
+Agent Core 把传入的 `tools` 作为本次 Run 唯一的调用注册表，并把其中的名称、描述和 Schema 交给 ModelProvider；OpenAI-compatible Provider 将它们发送为模型可调用的函数列表。模型服务仍可能返回列表外的工具名。此时该调用不会执行或扩大授权范围；Agent Core 发出 `tool.failed`，把错误作为工具结果回送模型，使其可以在轮数限制内改用已注册工具或直接回答。未注册工具的失败事件同时持久化诊断字段：Provider 输出的工具名、本次 Run 提供给 Provider 的工具名清单、模型 Provider ID、轮次，以及服务有返回时提供的请求 ID、响应 ID 和实际模型名。字段不含提示词、工具参数或密钥；这些元数据能帮助关联 Provider 服务日志，并说明 Application/Agent Core 提供了什么、Provider 边界返回了什么，但无法单凭客户端日志识别托管模型服务内部是否由模型生成或由其网关改写。
 
 使用 `AsyncIterable` 表达一次执行的顺序事件，便于取消、测试、多任务并发和在 CLI 中复用。
 

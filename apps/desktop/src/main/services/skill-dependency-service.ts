@@ -357,7 +357,10 @@ export class SkillDependencyService {
     return summaries;
   }
 
-  /** 读取与当前 Skill revision/profile/lock 对应的最近持久化快照选择。 */
+  /**
+   * 读取当前 profile/lock 的最近快照选择。
+   * 当前修订优先；否则恢复兼容旧修订的待确认选择。
+   */
   getSavedDependencySelection(skillId: string, lockHash: string): string[] {
     const skill = this.store.skills.get(skillId);
     const profile = skill?.runtimeProfile;

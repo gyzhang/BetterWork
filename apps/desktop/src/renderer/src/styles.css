@@ -10,6 +10,7 @@
   --motion-instant: 120ms;
   --motion-expand: 180ms;
   --motion-overlay: 240ms;
+  --motion-narration: 2400ms;
   --motion-easing: cubic-bezier(0.2, 0, 0.2, 1);
 
   /* 组件间距六档（docs/10 §9.8）：官方设计系统共同使用的 4／8／12／16／24／32 子集。
@@ -1868,6 +1869,27 @@ small {
   color: var(--text-secondary);
   font-size: var(--font-size-body);
   line-height: var(--line-height-body);
+}
+.expert-capability-groups {
+  display: grid;
+  gap: var(--space-8);
+}
+.expert-capability-group {
+  display: grid;
+  gap: var(--space-4);
+}
+.expert-capability-list {
+  display: grid;
+  gap: var(--space-4);
+  margin: 0;
+  padding-left: var(--space-16);
+  color: var(--text-secondary);
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
+}
+.expert-capability-list li {
+  display: grid;
+  gap: var(--space-4);
 }
 .expert-memory-summary {
   display: grid;
@@ -3924,6 +3946,52 @@ button.list-row:where(:not(:disabled)):hover {
 .run-group {
   margin-bottom: var(--space-8);
 }
+.process-narration-anchor {
+  min-width: 0;
+  margin-bottom: var(--space-16);
+}
+.process-narration .disclosure-label {
+  align-items: flex-start;
+  line-height: var(--line-height-body);
+}
+.process-narration .disclosure-marker {
+  margin-top: var(--space-4);
+}
+.process-narration-title {
+  flex: none;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+.process-narration-preview {
+  display: -webkit-box;
+  min-width: 0;
+  flex: 1;
+  color: var(--text-secondary);
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.process-narration[open] .process-narration-preview {
+  display: none;
+}
+.process-narration-list {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-12);
+  padding-left: var(--space-24);
+}
+.process-narration-entry {
+  min-width: 0;
+  padding-top: var(--space-8);
+  border-top: 1px solid var(--border-subtle);
+}
+.process-narration-entry:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
 .run-divider {
   display: flex;
   align-items: center;
@@ -4945,6 +5013,77 @@ select,
   margin: var(--space-24) 0;
   border: 0;
   border-top: 1px solid var(--border-subtle);
+}
+.process-narration-entry .markdown-preview {
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  color: var(--text-secondary);
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  overflow: visible;
+  overflow-wrap: anywhere;
+}
+.process-narration-entry .markdown-preview h1,
+.process-narration-entry .markdown-preview h2,
+.process-narration-entry .markdown-preview h3 {
+  margin: 0 0 var(--space-8);
+  padding: 0;
+  color: var(--text-primary);
+  font-size: var(--font-size-emphasis);
+  border: 0;
+}
+.process-narration-entry .markdown-preview p,
+.process-narration-entry .markdown-preview ul,
+.process-narration-entry .markdown-preview ol,
+.process-narration-entry .markdown-preview blockquote,
+.process-narration-entry .markdown-preview pre,
+.process-narration-entry .markdown-preview table {
+  margin-bottom: var(--space-8);
+}
+.process-narration-entry .markdown-preview > *:last-child {
+  margin-bottom: 0;
+}
+.process-narration-preview.is-streaming,
+.process-narration-entry[data-streaming='true']
+  .markdown-preview
+  :is(p, h1, h2, h3, li, blockquote, pre) {
+  color: transparent;
+  background-image: linear-gradient(
+    90deg,
+    var(--text-primary) 0%,
+    var(--text-primary) 38%,
+    var(--brand) 50%,
+    var(--text-primary) 62%,
+    var(--text-primary) 100%
+  );
+  background-position: 100% 0;
+  background-size: 240% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: process-narration-shimmer var(--motion-narration) linear infinite;
+}
+@keyframes process-narration-shimmer {
+  to {
+    background-position: -140% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .process-narration-preview.is-streaming,
+  .process-narration-entry[data-streaming='true']
+    .markdown-preview
+    :is(p, h1, h2, h3, li, blockquote, pre) {
+    color: var(--text-primary);
+    background-image: none;
+    -webkit-text-fill-color: currentColor;
+    animation: none;
+  }
 }
 .tool-activity {
   min-width: 0;

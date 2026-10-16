@@ -526,12 +526,12 @@ UI Foundation 首批提供四套成对色系：
 - 即时反馈：120ms
 - 展开与切换：180ms
 - Drawer 与大区域过渡：240ms
-- 不使用循环发光和无意义等待动画
+- 不使用无意义等待动画。循环光效仅用于 Run 仍在执行且尚未收到 `message.completed` 的当前过程旁白；消息完成或 Run 终态后立即停止
 - 支持 `prefers-reduced-motion`
 
-落地现状：已实施。时长与缓动提为 `:root` 上的独立 Token（`--motion-instant` 120ms、`--motion-expand` 180ms、`--motion-overlay` 240ms、`--motion-easing`），组件不得写死毫秒数。
+落地现状：已实施。时长与缓动提为 `:root` 上的独立 Token（`--motion-instant` 120ms、`--motion-expand` 180ms、`--motion-overlay` 240ms、`--motion-narration` 2400ms、`--motion-easing`），组件不得写死毫秒数。
 
-交互控件的状态变化走 120ms transition；挂载即出现的浮层（Sheet、通知面板、Toast、上下文面板、动作错误条）走 keyframes，按浮层或展开档取时长；`prefers-reduced-motion: reduce` 下降级**分两轨**：keyframes 压到 0.01ms 一帧内结束（保留 `animationend`），transition 直接取 `0s`。「不使用循环发光和无意义等待动画」这一条天然满足。
+交互控件的状态变化走 120ms transition；挂载即出现的浮层（Sheet、通知面板、Toast、上下文面板、动作错误条）走 keyframes，按浮层或展开档取时长；`prefers-reduced-motion: reduce` 下降级**分两轨**：keyframes 压到 0.01ms 一帧内结束（保留 `animationend`），transition 直接取 `0s`。过程旁白的流动光效由当前消息流状态驱动，只在活跃生成时循环，并在减少动态效果设置下关闭。
 
 两轨不能并成一句「一律压到 0.01ms」：`animation-name` 的初始值是 `none`，给 `*` 设动画时长造不出动画；`transition-property` 的初始值却是 `all`，给 `*` 设非零过渡时长等于**替每一个没声明过渡的元素声明了「所有属性都动一会儿」**——那条降级于是反过来开启动效。2026-10-02 焦点环就坏在这里：`.markdown-table` 不声明 transition，`outline-width`／`outline-offset`／`outline-color` 被拉进过渡后停在聚焦前的 `3px / 0px / currentColor`，环又跑到盒外（[ADR-0035](adr/0035-focus-ring-inside-control-box.md)）。护栏：「界面观感基线 › 全局动效降级只能关过渡、压动画，不得给 * 造出过渡」。
 
@@ -719,7 +719,8 @@ UI Foundation 首批提供四套成对色系：
 | `RunSummaryRow` | `components/RunSummaryRow.tsx` | Run 状态·时间与“未运行”措辞唯一出口，基于 ListRow |
 | `ToolActivity` | `components/ToolActivity.tsx` | 工具活动摘要与按需详情；原始载荷只在折叠详情 |
 | `MessageBlock` | `components/MessageBlock.tsx` | 发言者、正文与就地动作同一块；工作页发言者称呼来自设置，正文按 author 呈现 |
-| `WorkMessageList` | `components/WorkMessageList.tsx` | 工作页按 Run 呈现请求、工具、回答与终态；各 Run 按自身事件缓存投影。已完成回答的保存动作固定其 Run 与正文，失败只在对应回答呈现，成功只有一枚局部 TransientToast |
+| `ProcessNarration` | `components/ProcessNarration.tsx` | 工作页逐条呈现可见的模型过程旁白；默认折叠并显示最新一条，展开后按序查看；仅活跃流式条目显示光效，终态停止 |
+| `WorkMessageList` | `components/WorkMessageList.tsx` | 工作页按 Run 呈现请求、工具、过程旁白、最终回答与终态；各 Run 按自身事件缓存投影。已完成回答的保存动作固定其 Run 与正文，失败只在对应 Run 呈现，成功只有一枚局部 TransientToast |
 | `Composer` | `components/Composer.tsx` | 任务要求卡与固定高度工具栏分离；工具栏与窗口底部留 `--space-12`，材料变化不推挤输入卡；idle/starting/running 与 locked 分列 |
 | `ContextPanel` | `components/ContextPanel.tsx` | 可完全收起的任务上下文，按过程/资料/记忆/简报/成果分组；资料页管理本次材料用途与移除 |
 | `ProcessContext` | `components/context/ProcessContext.tsx` | 过程页签的连续简报表单、工作阶段与执行历史；保留目标/进度冲突及精确来源回看 |
@@ -798,6 +799,7 @@ UI Foundation 首批提供四套成对色系：
 - ActivityGroup 合并已落地（理解任务 / 处理工作材料 / 整理结果 / 任务完成），阶段标题通过 TOOL_LABELS 覆盖已登记工具（映射在 `lib/labels.ts` 的 `TOOL_LABELS`），检索类工具还会给出「已查阅 N 条来源」这种具体摘要。新增工具必须同步该映射。
 - 对话按「用户要求 → 紧凑过程摘要 → 主要回答 → 成果操作」排列。每个 Run 的工具过程默认只占一行，显示次数、进行中/失败/停止状态；展开后以可键盘操作的工具药丸呈现，逐项打开参数、结果和错误。成功不铺满绿色卡片；长路径与输出不能撑宽对话列。中间轮次文本不拼入已完成的最终回答。
 - 对话回答采用无外框的正文排版，不复用成果预览的纸张边框、阴影与大内边距。成果自身的预览样式不变。
+- Run 中可见的助手消息按 `messageId` 逐条收纳为过程旁白：默认折叠并显示最新一条，展开后按序查看；当前仍在流式生成的旁白显示流动光效，收到 `message.completed`、Run 终态或系统减少动态效果时停止。成功 Run 的最终回答单独显示，`reasoning.delta` 不进入对话。
 - 过程面板复用同一套工具药丸与详情。参数与结果分区、结构化字段分组，文本保留换行，JSON 缩进；长输出在有高度上限的区域滚动，默认不挂载全部原始载荷。失败和取消有可见状态，不因折叠而伪装为成功。Skill 命令即使通过外层 `tool.completed` 返回，也按命令结果中的 `status` 呈现：`failed` 和 `timed-out` 计为失败，`cancelled` 计为停止；打开详情可查看该命令返回的结果与错误。
 - 流式生成仅在用户接近底部时自动跟随；用户上翻后保留阅读位置，提供「回到最新」入口。展开工具详情不触发强制滚动。打开历史任务定位到最新回答开头；无过程查看需求时右栏默认收起，开始执行不强制展开。
 

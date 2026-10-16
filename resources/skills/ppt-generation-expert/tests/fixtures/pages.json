@@ -1,0 +1,13 @@
+{
+  "drop_host_slides": true,
+  "pages": [
+    {
+      "src": null,
+      "layout": "封面",
+      "title": "端到端回归基线",
+      "subtitle": "ppt-generation-expert 自检"
+    },
+    { "src": 0, "layout": "标题", "title": "三桶拆分后月度曲线真相浮现", "tag": "现状诊断" },
+    { "src": 1, "layout": "标题", "title": "投入集中度是可控风险而非失控信号", "tag": "结论与行动" }
+  ]
+}

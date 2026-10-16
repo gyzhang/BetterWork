@@ -6,6 +6,8 @@
 
 ## 当前人工验证包
 
+> 本记录对应 2026-10-15 13:44 构建的安装包，早于首批内置研究与汇报资源重新纳入。当前任务分支源码已登记 1 个 Expert 和 1 个 Skill；尚未基于该分支重建安装包。
+
 - 平台：macOS arm64；2026-10-15 按空白 Skill/Expert 发布策略重新构建。
 - 构建命令：`npm run dist:mac --workspace=@betterwork/desktop`。
 - 文件：`apps/desktop/dist/BetterWork-1.2.0-arm64.dmg`，323,898,525 字节。
@@ -25,4 +27,4 @@
 
 任务基线为 `6bf894f98537fd38e6125e5c5e3182300d3ad273`。发布与服务定向回归四文件 43 项通过；`npm run check:quick -- --base origin/main` 的 lint、差异格式、类型、文档 156 项、发布预检、实际清单消费者和相关行为测试通过，各阶段用例有重叠，不相加。构建、DMG 校验和挂载后的资源预检通过；源码与安装镜像均为 0 Skill、0 Expert。
 
-本机没有 Developer ID，构建跳过代码签名。当前包的三个内置 Node MCP 仍存在 `app.asar` 脚本入口被独立 Node 读取时的 `MODULE_NOT_FOUND` 问题，本次只清理发布内容，未修复该运行时问题。新安装包尚未执行真实 UI 走查，完整 `npm run verify` 未运行；后续功能仍由用户人工验收。
+本机没有 Developer ID，构建跳过代码签名。该包对应源码基线与安装镜像均为 0 Skill、0 Expert；三个内置 Node MCP 仍存在 `app.asar` 脚本入口被独立 Node 读取时的 `MODULE_NOT_FOUND` 问题，本次只清理发布内容，未修复该运行时问题。该安装包尚未执行真实 UI 走查，完整 `npm run verify` 未运行；后续功能仍由用户人工验收。
