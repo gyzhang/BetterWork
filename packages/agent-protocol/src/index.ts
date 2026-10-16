@@ -27,6 +27,84 @@ const eventBaseSchema = z.object({
   createdAt: z.number().int().nonnegative(),
 });
 
+const modelCallIdSchema = z.string().min(1).max(128);
+const modelRoundSchema = z.number().int().nonnegative();
+const providerIdSchema = z.string().min(1).max(128);
+const hasControlCharacter = (value: string): boolean => {
+  for (let index = 0; index < value.length; index += 1) {
+    const character = value.charCodeAt(index);
+    if (character < 32 || character === 127) return true;
+  }
+  return false;
+};
+const safeModelMetadataSchema = (maxLength: number) =>
+  z
+    .string()
+    .trim()
+    .min(1)
+    .max(maxLength)
+    .refine(
+      (value) =>
+        !/^[a-z][a-z\d+.-]*:\/\//iu.test(value) &&
+        !/[?#]/u.test(value) &&
+        !hasControlCharacter(value) &&
+        !/^(?:bearer|basic)\s/iu.test(value) &&
+        !/^(?:sk|rk|pk)-[a-z\d_-]{8,}$/iu.test(value),
+      '不得包含 URL 或凭据形态。',
+    );
+export const modelProviderMetadataIdSchema = safeModelMetadataSchema(256);
+export const modelResponseModelSchema = safeModelMetadataSchema(128);
+const modelDurationSchema = z.number().finite().nonnegative();
+
+export const modelUsageSchema = z
+  .object({
+    promptTokens: z.number().int().nonnegative().optional(),
+    completionTokens: z.number().int().nonnegative().optional(),
+    totalTokens: z.number().int().nonnegative().optional(),
+  })
+  .strict()
+  .refine((usage) => Object.values(usage).some((value) => value !== undefined), {
+    message: 'usage 至少要包含一个服务返回的 token 数。',
+  });
+export type ModelUsage = z.infer<typeof modelUsageSchema>;
+
+export const modelFinishReasonSchema = z.enum([
+  'stop',
+  'length',
+  'tool-calls',
+  'content-filter',
+  'unknown',
+]);
+export type ModelFinishReason = z.infer<typeof modelFinishReasonSchema>;
+
+export const modelErrorCodeSchema = z.enum([
+  'provider-error',
+  'stream-error',
+  'stream-incomplete',
+  'empty-response',
+  'output-limit',
+  'content-filter',
+  'unknown-finish-reason',
+]);
+export type ModelErrorCode = z.infer<typeof modelErrorCodeSchema>;
+
+const modelEndingFields = {
+  modelCallId: modelCallIdSchema,
+  round: modelRoundSchema,
+  durationMs: modelDurationSchema,
+  timeToFirstTextMs: modelDurationSchema.optional(),
+  finishReason: modelFinishReasonSchema.optional(),
+  usage: modelUsageSchema.optional(),
+  providerRequestId: modelProviderMetadataIdSchema.optional(),
+  providerResponseId: modelProviderMetadataIdSchema.optional(),
+  responseModel: modelResponseModelSchema.optional(),
+};
+
+const toolModelCorrelationFields = {
+  modelCallId: modelCallIdSchema.optional(),
+  round: modelRoundSchema.optional(),
+};
+
 export const agentRuntimeEventSchema = z.discriminatedUnion('type', [
   eventBaseSchema.extend({
     type: z.literal('run.started'),
@@ -45,35 +123,85 @@ export const agentRuntimeEventSchema = z.discriminatedUnion('type', [
     content: z.string(),
   }),
   eventBaseSchema.extend({ type: z.literal('reasoning.delta'), delta: z.string() }),
-  eventBaseSchema.extend({ type: z.literal('tool.requested'), toolCall: toolCallSchema }),
-  eventBaseSchema.extend({ type: z.literal('tool.started'), toolCall: toolCallSchema }),
+  eventBaseSchema
+    .extend({
+      type: z.literal('model.started'),
+      modelCallId: modelCallIdSchema,
+      round: modelRoundSchema,
+      providerId: providerIdSchema,
+      messageCount: z.number().int().nonnegative(),
+      toolDefinitionCount: z.number().int().nonnegative(),
+    })
+    .strict(),
+  eventBaseSchema
+    .extend({
+      type: z.literal('model.completed'),
+      ...modelEndingFields,
+    })
+    .strict(),
+  eventBaseSchema
+    .extend({
+      type: z.literal('model.failed'),
+      ...modelEndingFields,
+      errorCode: modelErrorCodeSchema,
+      errorSummary: z.string().min(1).max(500),
+    })
+    .strict(),
+  eventBaseSchema
+    .extend({
+      type: z.literal('model.cancelled'),
+      ...modelEndingFields,
+    })
+    .strict(),
+  eventBaseSchema.extend({
+    type: z.literal('tool.requested'),
+    toolCall: toolCallSchema,
+    ...toolModelCorrelationFields,
+  }),
+  eventBaseSchema.extend({
+    type: z.literal('tool.started'),
+    toolCall: toolCallSchema,
+    ...toolModelCorrelationFields,
+  }),
   eventBaseSchema.extend({
     type: z.literal('tool.progress'),
     toolCallId: z.string(),
     message: z.string(),
+    ...toolModelCorrelationFields,
   }),
   eventBaseSchema.extend({
     type: z.literal('tool.completed'),
     toolCallId: z.string(),
     output: z.unknown(),
+    ...toolModelCorrelationFields,
   }),
   eventBaseSchema.extend({
     type: z.literal('tool.failed'),
     toolCallId: z.string(),
     error: z.string(),
+    ...toolModelCorrelationFields,
     diagnostic: z
-      .object({
-        kind: z.literal('unknown-tool'),
-        source: z.literal('model-provider-output'),
-        requestedName: z.string(),
-        availableToolNames: z.array(z.string()),
-        modelProviderId: z.string(),
-        round: z.number().int().nonnegative(),
-        providerRequestId: z.string().optional(),
-        providerResponseId: z.string().optional(),
-        responseModel: z.string().optional(),
-      })
-      .strict()
+      .discriminatedUnion('kind', [
+        z
+          .object({
+            kind: z.literal('unknown-tool'),
+            source: z.literal('model-provider-output'),
+            requestedName: z.string(),
+            availableToolNames: z.array(z.string()),
+            modelProviderId: providerIdSchema,
+            round: z.number().int().nonnegative(),
+            providerRequestId: modelProviderMetadataIdSchema.optional(),
+            providerResponseId: modelProviderMetadataIdSchema.optional(),
+            responseModel: modelResponseModelSchema.optional(),
+          })
+          .strict(),
+        z
+          .object({
+            kind: z.literal('invalid-arguments'),
+            source: z.literal('model-provider-output'),
+          })
+          .strict(),
+      ])
       .optional(),
   }),
   eventBaseSchema.extend({ type: z.literal('run.completed'), finalContent: z.string() }),
@@ -2420,14 +2548,6 @@ export const memoryJobStatusSchema = z.enum([
 export type MemoryJobStatus = z.infer<typeof memoryJobStatusSchema>;
 export const memoryJobTriggerSchema = z.enum(['automatic', 'manual-retry']);
 export type MemoryJobTrigger = z.infer<typeof memoryJobTriggerSchema>;
-export const modelFinishReasonSchema = z.enum([
-  'stop',
-  'length',
-  'tool-calls',
-  'content-filter',
-  'unknown',
-]);
-export type ModelFinishReason = z.infer<typeof modelFinishReasonSchema>;
 
 /** §7.2：超长输入取首尾等分片段并标注非全文；证据区间只能落在实际片段内。 */
 export const memoryExtractionFragmentSchema = z
@@ -4504,6 +4624,221 @@ export const runSummarySchema = z.object({
   bindings: z.array(runSkillBindingSummarySchema).optional(),
 });
 
+export const runDiagnosticsSectionSchema = z.enum(['core']);
+export type RunDiagnosticsSection = z.infer<typeof runDiagnosticsSectionSchema>;
+
+export const runDiagnosticsRecordingSchema = z
+  .object({
+    version: z.number().int().positive(),
+    sections: z
+      .array(runDiagnosticsSectionSchema)
+      .min(1)
+      .max(8)
+      .refine((sections) => new Set(sections).size === sections.length),
+  })
+  .strict();
+export type RunDiagnosticsRecording = z.infer<typeof runDiagnosticsRecordingSchema>;
+export const CURRENT_RUN_DIAGNOSTICS_RECORDING = {
+  version: 1,
+  sections: ['core'],
+} as const satisfies RunDiagnosticsRecording;
+
+export const runDiagnosticsIntegritySchema = z.enum(['complete', 'partial', 'unavailable']);
+export const RUN_DIAGNOSTICS_PAGE_SIZE_DEFAULT = 50;
+export const RUN_DIAGNOSTICS_PAGE_SIZE_MAX = 200;
+export const RUN_DIAGNOSTIC_DETAIL_MAX_UTF8_BYTES = 65_536;
+export const runDiagnosticNodeKindSchema = z.enum(['round', 'model', 'tool']);
+export const runDiagnosticNodeStatusSchema = z.enum([
+  'pending',
+  'running',
+  'completed',
+  'failed',
+  'rejected',
+  'cancelled',
+  'interrupted',
+  'unknown',
+]);
+export const runDiagnosticEvidenceStateSchema = z.enum(['recorded', 'derived', 'missing']);
+
+const runDiagnosticUsageMetricSchema = z
+  .object({
+    knownSubtotal: z.string().regex(/^(?:0|[1-9]\d*)$/u),
+    knownCallCount: z.number().int().nonnegative(),
+    missingCallCount: z.number().int().nonnegative(),
+  })
+  .strict();
+
+export const runDiagnosticsUsageSchema = z
+  .object({
+    promptTokens: runDiagnosticUsageMetricSchema,
+    completionTokens: runDiagnosticUsageMetricSchema,
+    totalTokens: runDiagnosticUsageMetricSchema,
+  })
+  .strict();
+
+export const runDiagnosticsSummarySchema = z
+  .object({
+    runId: z.string().min(1),
+    taskId: z.string().min(1),
+    sessionId: z.string().min(1),
+    status: runSummarySchema.shape.status,
+    startedAt: z.number().int().nonnegative().optional(),
+    completedAt: z.number().int().nonnegative().optional(),
+    modelCallCount: z.number().int().nonnegative(),
+    toolCallCount: z.number().int().nonnegative(),
+    toolExecutionCount: z.number().int().nonnegative(),
+    failedToolExecutionCount: z.number().int().nonnegative(),
+    rejectedToolCallCount: z.number().int().nonnegative(),
+    usage: runDiagnosticsUsageSchema,
+    recordingVersion: z.number().int().positive().optional(),
+    enabledSections: z.array(runDiagnosticsSectionSchema).optional(),
+    integrity: runDiagnosticsIntegritySchema,
+  })
+  .strict();
+export type RunDiagnosticsSummary = z.infer<typeof runDiagnosticsSummarySchema>;
+
+export const runDiagnosticNodeSchema = z
+  .object({
+    id: z.string().min(1).max(512),
+    parentId: z.string().min(1).max(512).optional(),
+    kind: runDiagnosticNodeKindSchema,
+    status: runDiagnosticNodeStatusSchema,
+    sourceKind: z.literal('core-journal'),
+    sourceId: z.string().min(1).max(512),
+    sourceEventIds: z.array(z.string().min(1).max(512)).max(200).optional(),
+    sourceSequenceStart: z.number().int().nonnegative().optional(),
+    sourceSequenceEnd: z.number().int().nonnegative().optional(),
+    evidenceState: runDiagnosticEvidenceStateSchema,
+    round: z.number().int().nonnegative().optional(),
+    modelCallId: z.string().min(1).max(512).optional(),
+    toolCallId: z.string().min(1).max(512).optional(),
+    toolName: z.string().max(256).optional(),
+    executionState: z.enum(['not-started', 'started']).optional(),
+    startedAt: z.number().int().nonnegative().optional(),
+    endedAt: z.number().int().nonnegative().optional(),
+    durationMs: z.number().finite().nonnegative().optional(),
+    timeToFirstTextMs: z.number().finite().nonnegative().optional(),
+    finishReason: modelFinishReasonSchema.optional(),
+    usage: modelUsageSchema.optional(),
+    errorCode: z.string().min(1).max(64).optional(),
+  })
+  .strict();
+export type RunDiagnosticNode = z.infer<typeof runDiagnosticNodeSchema>;
+
+export const runDiagnosticsCursorSchema = z
+  .object({
+    runId: z.string().min(1),
+    source: z.literal('core-journal'),
+    afterSequence: z.number().int().nonnegative(),
+    afterKind: runDiagnosticNodeKindSchema,
+    afterNodeId: z.string().min(1).max(512),
+  })
+  .strict();
+export type RunDiagnosticsCursor = z.infer<typeof runDiagnosticsCursorSchema>;
+
+export const runDiagnosticsScopeRequestSchema = z
+  .object({
+    workspaceId: z.string().min(1),
+    taskId: z.string().min(1),
+    runId: z.string().min(1),
+  })
+  .strict();
+export type RunDiagnosticsScopeRequest = z.infer<typeof runDiagnosticsScopeRequestSchema>;
+export const getRunDiagnosticsSummaryRequestSchema = runDiagnosticsScopeRequestSchema;
+
+const runDiagnosticsPageRequestFields = {
+  workspaceId: z.string().min(1),
+  taskId: z.string().min(1),
+  runId: z.string().min(1),
+  pageSize: z
+    .number()
+    .int()
+    .min(1)
+    .max(RUN_DIAGNOSTICS_PAGE_SIZE_MAX)
+    .default(RUN_DIAGNOSTICS_PAGE_SIZE_DEFAULT),
+  cursor: runDiagnosticsCursorSchema.optional(),
+};
+export const listRunDiagnosticsPageRequestSchema = z
+  .object(runDiagnosticsPageRequestFields)
+  .strict()
+  .superRefine((query, context) => {
+    if (query.cursor && query.cursor.runId !== query.runId) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['cursor', 'runId'],
+        message: '诊断游标必须属于当前 Run',
+      });
+    }
+  });
+export type ListRunDiagnosticsPageRequest = z.input<typeof listRunDiagnosticsPageRequestSchema>;
+
+export const getRunDiagnosticNodeDetailRequestSchema = z
+  .object({
+    ...runDiagnosticsScopeRequestSchema.shape,
+    nodeId: z.string().min(1).max(512),
+  })
+  .strict();
+export type GetRunDiagnosticNodeDetailRequest = z.infer<
+  typeof getRunDiagnosticNodeDetailRequestSchema
+>;
+
+export const runDiagnosticsPageQuerySchema = z
+  .object({
+    runId: z.string().min(1),
+    pageSize: z
+      .number()
+      .int()
+      .min(1)
+      .max(RUN_DIAGNOSTICS_PAGE_SIZE_MAX)
+      .default(RUN_DIAGNOSTICS_PAGE_SIZE_DEFAULT),
+    cursor: runDiagnosticsCursorSchema.optional(),
+  })
+  .strict()
+  .superRefine((query, context) => {
+    if (query.cursor && query.cursor.runId !== query.runId) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['cursor', 'runId'],
+        message: '诊断游标必须属于当前 Run',
+      });
+    }
+  });
+export type RunDiagnosticsPageQuery = z.input<typeof runDiagnosticsPageQuerySchema>;
+
+export const runDiagnosticsPageSchema = z
+  .object({
+    summary: runDiagnosticsSummarySchema,
+    nodes: z.array(runDiagnosticNodeSchema).max(RUN_DIAGNOSTICS_PAGE_SIZE_MAX),
+    nextCursor: runDiagnosticsCursorSchema.optional(),
+    integrity: runDiagnosticsIntegritySchema,
+  })
+  .strict();
+export type RunDiagnosticsPage = z.infer<typeof runDiagnosticsPageSchema>;
+export const runDiagnosticsPageResponseSchema = runDiagnosticsPageSchema.nullable();
+export const runDiagnosticsSummaryResponseSchema = runDiagnosticsSummarySchema.nullable();
+
+export const runDiagnosticNodeDetailSchema = z
+  .object({
+    runId: z.string().min(1),
+    nodeId: z.string().min(1).max(512),
+    sourceKind: z.literal('core-journal'),
+    sourceSequenceStart: z.number().int().nonnegative(),
+    sourceSequenceEnd: z.number().int().nonnegative(),
+    payloadJson: z
+      .string()
+      .refine(
+        (value) =>
+          new TextEncoder().encode(value).byteLength <= RUN_DIAGNOSTIC_DETAIL_MAX_UTF8_BYTES,
+        {
+          message: '诊断详情不能超过 64 KiB UTF-8',
+        },
+      ),
+    truncated: z.boolean(),
+  })
+  .strict();
+export type RunDiagnosticNodeDetail = z.infer<typeof runDiagnosticNodeDetailSchema>;
+export const runDiagnosticNodeDetailResponseSchema = runDiagnosticNodeDetailSchema.nullable();
+
 const taskContinuitySourceSchema = z
   .object({
     runId: z.string().min(1),
@@ -5968,6 +6303,9 @@ export const IpcChannel = {
   ListRunEvents: 'run:list-events',
   ListRuns: 'run:list',
   RunEvent: 'run:event',
+  GetRunDiagnosticsSummary: 'run:diagnostics-summary',
+  ListRunDiagnosticsPage: 'run:diagnostics-page',
+  GetRunDiagnosticNodeDetail: 'run:diagnostic-node-detail',
   GetDefaultWorkspace: 'workspace:get-default',
   /** 只弹目录选择器并返回路径：选目录不等于建空间，登记走 workspace:create。 */
   PickWorkspaceDirectory: 'workspace:pick-directory',
@@ -6129,6 +6467,11 @@ export interface BetterWorkDesktopApi {
     cancel(input: CancelRunRequest): Promise<{ cancelled: boolean }>;
     list(input?: ListRunsRequest): Promise<RunSummary[]>;
     listEvents(input: ListRunEventsRequest): Promise<AgentRuntimeEvent[]>;
+    getDiagnosticsSummary(input: RunDiagnosticsScopeRequest): Promise<RunDiagnosticsSummary | null>;
+    listDiagnosticsPage(input: ListRunDiagnosticsPageRequest): Promise<RunDiagnosticsPage | null>;
+    getDiagnosticNodeDetail(
+      input: GetRunDiagnosticNodeDetailRequest,
+    ): Promise<RunDiagnosticNodeDetail | null>;
     onEvent(listener: (event: AgentRuntimeEvent) => void): () => void;
   };
   runSettings: {

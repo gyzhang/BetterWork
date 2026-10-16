@@ -123,6 +123,68 @@ describe('OpenAICompatibleProvider endpoint resolution', () => {
 });
 
 describe('OpenAICompatibleProvider response diagnostics', () => {
+  it('keeps usage and provider metadata inside the execution-diagnostics contract', async () => {
+    const requestId = 'r'.repeat(220);
+    const responseChunk = JSON.stringify({
+      id: 'https://provider.example/response?token=secret',
+      model: 'm'.repeat(129),
+      choices: [{ delta: { content: '完成' } }],
+    });
+    const fetchImpl: typeof fetch = async () => {
+      const response = sse(
+        responseChunk,
+        wireFinish('stop', {
+          prompt_tokens: 1.5,
+          completion_tokens: 0,
+          total_tokens: Number.MAX_SAFE_INTEGER + 1,
+        }),
+      );
+      return new Response(response.body, { headers: { 'x-request-id': requestId } });
+    };
+    const model = new OpenAICompatibleProvider(
+      {
+        id: 'model-1',
+        baseUrl: 'https://host/v1',
+        apiKey: '',
+        model: 'configured-model',
+      },
+      { fetchImpl },
+    );
+
+    const done = doneOf(await collect(model.stream(request())));
+
+    expect(done).toEqual({
+      type: 'done',
+      finishReason: 'stop',
+      usage: { completionTokens: 0 },
+      providerRequestId: requestId,
+    });
+
+    const unsafeMetadataFetch: typeof fetch = async () => {
+      const response = sse(
+        JSON.stringify({
+          id: 'sk-test-credential-1234567890',
+          model: 'Bearer test-credential',
+          choices: [{ delta: { content: '完成' } }],
+        }),
+        wireFinish('stop'),
+      );
+      return new Response(response.body, { headers: { 'x-request-id': 'Bearer test-credential' } });
+    };
+    const unsafeMetadataModel = new OpenAICompatibleProvider(
+      {
+        id: 'model-1',
+        baseUrl: 'https://host/v1',
+        apiKey: '',
+        model: 'configured-model',
+      },
+      { fetchImpl: unsafeMetadataFetch },
+    );
+    const unsafeDone = doneOf(await collect(unsafeMetadataModel.stream(request())));
+
+    expect(unsafeDone).toEqual({ type: 'done', finishReason: 'stop' });
+  });
+
   it('preserves upstream request and response identifiers with the returned tool name', async () => {
     const toolResponse = JSON.stringify({
       id: 'response-123',

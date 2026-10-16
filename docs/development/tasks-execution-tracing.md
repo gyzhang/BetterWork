@@ -27,16 +27,16 @@
 | 卡 | 交付 | 前置 | 阶段 | 状态 | 证据/边界 |
 | --- | --- | --- | --- | --- | --- |
 | AT00 | 调研承接、契约与 Luna 目标交接 | 无 | M0 | done | 本轮仅文档；调研、任务卡与文档快检证据见 2026-10-17 日志；ADR 技术状态仍 Proposed |
-| AT01 | 模型生命周期与关联 Schema | AT00 | M1 | todo | 未开工 |
-| AT02 | Core 逐轮模型记录与收口 | AT01 | M1 | todo | 未开工 |
-| AT03 | Provider 元数据与用量边界 | AT02 | M1 | todo | 未开工 |
-| AT04 | 工具轮次关联与实际执行判定 | AT03 | M1 | todo | 未开工 |
-| AT05 | 诊断版本标记与核心只读投影 | AT04 | M1 | todo | 未开工 |
-| AT06 | 查询 IPC/Preload 与归属校验 | AT05 | M1 | todo | 未开工 |
-| AT07 | 历史/实时合并 Hook | AT06 | M1 | todo | 未开工 |
-| AT08 | 执行链详情领域组件 | AT07 | M1 | todo | 未开工 |
-| AT09 | 工作页当前/历史 Run 详情入口 | AT08 | M1 | todo | 未开工 |
-| AT10 | 第 1 期离线跨层回归 | AT09 | M1 | todo | 未开工；不自动运行 Electron |
+| AT01 | 模型生命周期与关联 Schema | AT00 | M1 | done | 602dc92f；协议最小反例红 1、定向 60 项绿、check:quick 退出 0，差异覆盖 12/12（100%）；迁移仍 v46 |
+| AT02 | Core 逐轮模型记录与收口 | AT01 | M1 | done | 602dc92f；Core 红 3 项、绿 46 项；check:quick 首轮 lint 红后修复、复跑退出 0，差异覆盖 78/78（100%）；迁移 v46 |
+| AT03 | Provider 元数据与用量边界 | AT02 | M1 | done | 602dc92f；Provider 红 1、Provider/Schema 绿 113 项；快检含 RunService/App heavy，退出 0，覆盖 96/96（100%）；迁移 v46 |
+| AT04 | 工具轮次关联与实际执行判定 | AT03 | M1 | done | 602dc92f；Core/投影/组件红 4 项、定向 55 项绿；快检第三轮退出 0，193 文件/3141 项 + 动态 IPC 211 项 + heavy 208 项，覆盖 105/105（100%）；v46 |
+| AT05 | 诊断版本标记与核心只读投影 | AT04 | M1 | done | 602dc92f；v47 迁移/回滚与只读投影 red→green；定向功能 66 项、协议/RunRepository 78 项、RunService heavy 2 项通过；check:quick 退出 0（functional 194 文件/3148 项、动态 272 项、heavy 210 项；覆盖 360/395=91.14%）；旧 Run 指标未知，详情合法 JSON 且不超过 64 KiB |
+| AT06 | 查询 IPC/Preload 与归属校验 | AT05 | M1 | done | 602dc92f；新增 summary/page/detail 共享 Schema、Main handler 与 Preload 方法；先行红测 3 失败，IPC/Preload 定向 4 文件/457 项通过；Workspace/Task/Run 越权与缺失返回 null，异常和两侧 Schema 拒绝；check:quick 退出 0（functional 194/3154、动态 IPC 277、heavy 210；覆盖 392/424=92.45%）；迁移 v47 |
+| AT07 | 历史/实时合并 Hook | AT06 | M1 | done | 602dc92f；Hook 先订阅后查 summary/全量分页，按 node/event ID 合并并按 Core sequence 从 0 检测缺口后补取；切 Run/卸载丢弃迟到响应；红 3、定向 2 文件/10 项绿；check:quick 退出 0（functional 196/3164、动态 277、heavy 210；覆盖 512/544=94.12%）；迁移 v47 |
+| AT08 | 执行链详情领域组件 | AT07 | M1 | done | 602dc92f；placeholder 最小行为反例红 7 项；定向 10 项绿；check:quick 最终退出 0（lint/format/typecheck/docs:check 156、functional 197/3174、动态消费者 277、heavy 5 文件/210；覆盖 587/625=93.92%）；迁移 v47 |
+| AT09 | 工作页当前/历史 Run 详情入口 | AT08 | M1 | done | 当前/历史 scoped 入口、切 Task/收起面板不取消 Run；ContextPanel 33 项、快检含 App heavy 通过；覆盖 604/643=93.93%，迁移 v47 |
+| AT10 | 第 1 期离线跨层回归 | AT09 | M1 | done | RunService＋临时文件 SQLite 重装配 red→green；IPC/Preload/Hook/React 合约 446 项通过；check:quick 退出 0（functional 197/3175、动态 277、heavy 211；覆盖 605/643=94.09%）；v47 |
 | AT11 | 宿主事实流迁移与记录器 | AT10 | M2 | todo | 未开工 |
 | AT12 | Run 准备、审计、清理、提交观测 | AT11 | M2 | todo | 未开工 |
 | AT13 | Skill 宿主阶段与执行关联 | AT12 | M2 | todo | 未开工 |
@@ -88,6 +88,7 @@
 - 范围：定义四类模型事件、严格用量/元数据和工具可选关联；共享类型由 Schema 派生，旧事件保持可解析。调整必要的直接消费者以保持类型检查，不发射新事件。
 - 反例/验收：负数/小数 token、过长标识、缺 modelCallId、非法结束类型被拒绝；旧 Run/tool/message 夹具仍通过。不要在本卡声明无人消费的 IPC channel。
 - 验证/停点：协议 Schema 定向测试和快检；无迁移、Provider 请求变化或 UI。
+- 实际证据：红跑 `node_modules/.bin/vitest run --project functional packages/agent-protocol/src/index.test.ts` 退出 1（正例被当前 Schema 以未知 discriminator 拒绝）；同命令绿跑 60 项退出 0。`npm run check:quick -- --base 602dc92ffe64a9f1010cd344933891f84addfc39` 退出 0，差异覆盖 12/12（100%）；详见 2026-10-17 日志。
 
 ### AT02：Core 逐轮模型记录与收口
 
@@ -95,6 +96,7 @@
 - 范围：同一事件工厂输出模型开始与唯一结束；独立 modelCallId、round、调用计数、单调 duration 和可选首个文本时间；done 元数据进入对应结束事件。
 - 反例/验收：模型→工具→模型两轮、tool-only、同步 stream 抛错、流中断、空流、length/filter/unknown、每个 yield 恢复处取消；失败也保留已收到的 usage。无迟到工具/下一轮、无重复终态、无 reasoning 展示。
 - 验证/停点：Core 确定性 clock/Fake Provider 测试及快检；不修改模型配置、不新增重试。
+- 实际证据：`node_modules/.bin/vitest run --project functional packages/agent-core/src/agent-engine.test.ts` 新增反例红 3 项；实现及旧顺序断言同步后 46 项通过。`check:quick` 首轮因 import-sort 退出 1，定向 ESLint 修复后以相同基点复跑退出 0，差异覆盖 78/78（100%）；详见 2026-10-17 日志。
 
 ### AT03：Provider 元数据与用量边界
 
@@ -102,6 +104,7 @@
 - 范围：核对实际 done 数据和诊断 Schema 兼容；只修本增量暴露的真实边界问题，不重复重写已经存在的解析器。
 - 反例/验收：usage 缺失/真实 0/部分字段、非法数字、finish_reason 后 usage、tool-only、服务请求/响应标识、超长或非法元数据；未知不变 0，`[DONE]` 不等待 HTTP EOF，取消/异常释放 reader。
 - 验证/停点：注入 fetch/ReadableStream，无触网；已有覆盖明确复用并记特征证据。不得强塞 include_usage、新设置或服务商分支。
+- 实际证据：Provider 反例红 1，Provider+协议定向回归 113 项绿。`check:quick -- --base 602dc92ffe64a9f1010cd344933891f84addfc39` 最终退出 0，覆盖 96/96（100%）；选中 RunService/App heavy（208 项）。首次 lint 的 control-regex 错误已定向修复；详见 2026-10-17 日志。
 
 ### AT04：工具轮次关联与实际执行判定
 

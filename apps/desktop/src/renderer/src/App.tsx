@@ -1983,6 +1983,7 @@ export function App(): React.JSX.Element {
           tab={contextTab}
           setTab={setContextTab}
           process={{
+            workspaceId: workspace?.id,
             taskId: activeTask?.id,
             taskContinuity,
             events,

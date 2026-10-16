@@ -4,7 +4,8 @@ export interface ToolActivityItem {
   id: string;
   name: string;
   input: Record<string, unknown>;
-  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'rejected' | 'cancelled';
+  executionState: 'not-started' | 'started';
   output?: unknown;
   error?: string;
   progress?: string;
@@ -61,6 +62,7 @@ export function deriveToolActivity(events: AgentRuntimeEvent[]): ToolActivityIte
         ...previous,
         ...event.toolCall,
         status: event.type === 'tool.started' ? 'running' : (previous?.status ?? 'pending'),
+        executionState: event.type === 'tool.started' ? 'started' : 'not-started',
       });
     } else if (
       event.type === 'tool.completed' ||
@@ -72,19 +74,25 @@ export function deriveToolActivity(events: AgentRuntimeEvent[]): ToolActivityIte
         name: '',
         input: {},
         status: 'pending',
+        executionState: 'not-started',
       };
       if (event.type === 'tool.completed') {
         const outcome = completedToolOutcome(item.name, event.output);
         items.set(item.id, {
           ...item,
           status: outcome?.status ?? 'completed',
+          executionState: 'started',
           output: event.output,
           ...(outcome?.error ? { error: outcome.error } : {}),
         });
       } else if (event.type === 'tool.failed') {
-        items.set(item.id, { ...item, status: 'failed', error: event.error });
+        items.set(item.id, {
+          ...item,
+          status: item.executionState === 'started' ? 'failed' : 'rejected',
+          error: event.error,
+        });
       } else {
-        items.set(item.id, { ...item, progress: event.message });
+        items.set(item.id, { ...item, executionState: 'started', progress: event.message });
       }
     } else if (
       event.type === 'run.cancelled' ||

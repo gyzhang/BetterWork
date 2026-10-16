@@ -2300,6 +2300,18 @@ export const appMigrations: readonly Migration[] = [
       `);
     },
   },
+  {
+    version: 48,
+    name: 'add Run diagnostics recording metadata',
+    up(db: Database.Database): void {
+      db.exec(`
+        ALTER TABLE runs ADD COLUMN diagnostics_recording_version INTEGER
+          CHECK (diagnostics_recording_version IS NULL OR diagnostics_recording_version > 0);
+        ALTER TABLE runs ADD COLUMN diagnostics_sections_json TEXT
+          CHECK (diagnostics_sections_json IS NULL OR json_valid(diagnostics_sections_json));
+      `);
+    },
+  },
 ];
 
 /**

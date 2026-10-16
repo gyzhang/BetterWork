@@ -1439,6 +1439,10 @@ small {
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
 }
+.activity-summary-action {
+  margin-left: auto;
+  flex: none;
+}
 .status-dot {
   width: 8px;
   height: 8px;
@@ -4465,6 +4469,16 @@ button.list-row:where(:not(:disabled)):hover {
   border-top: 1px solid var(--border);
 } /* 「本空间参考版本」小节此前完全没有样式：标题、说明与内联提示三块贴在一起，
    唯一的分隔来自 `.inline-message` 自带的上下 margin。现在由小节自己拥有纵向缝（docs/10 §9.8）。 */
+.task-run-history-entry {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-4);
+}
+.task-run-history-entry > .list-row {
+  min-width: 0;
+}
 .artifact-reference-section {
   display: grid;
   gap: var(--space-12);
@@ -5136,6 +5150,84 @@ select,
   max-height: 440px;
   overflow: auto;
   overscroll-behavior: contain;
+}
+.run-execution-details {
+  gap: var(--space-12);
+}
+.run-execution-details > .tabs {
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.run-execution-details-panels {
+  min-height: 0;
+  flex: 1;
+}
+.run-execution-details-panel:not([hidden]) {
+  display: grid;
+  height: 100%;
+  min-height: 0;
+  align-content: start;
+  gap: var(--space-12);
+  padding-top: var(--space-12);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.run-execution-round {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-8);
+}
+.run-execution-node-list {
+  display: grid;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.run-execution-node-fact {
+  overflow-wrap: anywhere;
+  color: var(--text-secondary);
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-body);
+}
+.run-execution-tool-detail {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-8);
+  padding-top: var(--space-8);
+}
+.run-execution-tool-detail pre {
+  max-width: 100%;
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-body);
+}
+.run-execution-facts {
+  display: grid;
+  gap: var(--space-8);
+  margin: 0;
+}
+.run-execution-facts > div {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-8);
+}
+.run-execution-facts dt {
+  color: var(--text-secondary);
+}
+.run-execution-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--text-primary);
+  text-align: right;
 }
 .tool-pills {
   display: flex;

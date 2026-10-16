@@ -1233,6 +1233,173 @@ describe('registerIpc', () => {
     await expect(readFile(target, 'utf8')).resolves.toContain('人工补充：跟进续约风险。');
   });
 
+  it('serves Run diagnostics only inside the requested Workspace, Task, and Run scope', async () => {
+    const workspaceA = store.workspaces.getOrCreate(
+      path.join(temporaryDirectory, 'diagnostics-a'),
+      '诊断空间 A',
+    );
+    const workspaceB = store.workspaces.getOrCreate(
+      path.join(temporaryDirectory, 'diagnostics-b'),
+      '诊断空间 B',
+    );
+    const taskA = store.tasks.create(workspaceA.id, '诊断任务 A', 'synthetic');
+    const taskB = store.tasks.create(workspaceB.id, '诊断任务 B', 'synthetic');
+    const runA = 'ipc-diagnostics-run-a';
+    const runB = 'ipc-diagnostics-run-b';
+    const addDiagnosticRun = (runId: string, taskId: string, sessionId: string): void => {
+      store.runs.create(
+        {
+          id: runId,
+          taskId,
+          sessionId,
+          prompt: 'synthetic prompt',
+          status: 'running',
+          createdAt: 10,
+        },
+        { version: 1, sections: ['core'] },
+      );
+    };
+    addDiagnosticRun(runA, taskA.task.id, taskA.sessionId);
+    addDiagnosticRun(runB, taskB.task.id, taskB.sessionId);
+    store.runs.appendEvent({
+      id: 'ipc-diagnostics-a-model',
+      runId: runA,
+      sequence: 0,
+      createdAt: 20,
+      type: 'model.started',
+      modelCallId: 'ipc-model-a',
+      round: 0,
+      providerId: 'fixture',
+      messageCount: 1,
+      toolDefinitionCount: 1,
+    });
+    store.runs.appendEvent({
+      id: 'ipc-diagnostics-a-request',
+      runId: runA,
+      sequence: 1,
+      createdAt: 21,
+      type: 'tool.requested',
+      modelCallId: 'ipc-model-a',
+      round: 0,
+      toolCall: { id: 'ipc-tool-a', name: 'fixture', input: { value: 'A' } },
+    });
+    store.runs.appendEvent({
+      id: 'ipc-diagnostics-a-tool',
+      runId: runA,
+      sequence: 2,
+      createdAt: 22,
+      type: 'tool.started',
+      modelCallId: 'ipc-model-a',
+      round: 0,
+      toolCall: { id: 'ipc-tool-a', name: 'fixture', input: { value: 'A' } },
+    });
+    store.runs.appendEvent({
+      id: 'ipc-diagnostics-b-request',
+      runId: runB,
+      sequence: 0,
+      createdAt: 30,
+      type: 'tool.requested',
+      toolCall: { id: 'ipc-tool-b', name: 'fixture', input: { value: 'B' } },
+    });
+    store.runs.appendEvent({
+      id: 'ipc-diagnostics-b-tool',
+      runId: runB,
+      sequence: 1,
+      createdAt: 31,
+      type: 'tool.started',
+      toolCall: { id: 'ipc-tool-b', name: 'fixture', input: { value: 'B' } },
+    });
+    const scopeA = { workspaceId: workspaceA.id, taskId: taskA.task.id, runId: runA };
+
+    await expect(invoke(IpcChannel.GetRunDiagnosticsSummary, scopeA)).resolves.toMatchObject({
+      runId: runA,
+      taskId: taskA.task.id,
+      modelCallCount: 1,
+    });
+    const page = await invoke(IpcChannel.ListRunDiagnosticsPage, scopeA);
+    expect(page).toMatchObject({
+      summary: { runId: runA },
+      nodes: [
+        { id: 'round:0', kind: 'round' },
+        { id: 'model:ipc-model-a', modelCallId: 'ipc-model-a' },
+        { id: 'tool:ipc-tool-a', toolCallId: 'ipc-tool-a' },
+      ],
+    });
+    await expect(
+      invoke(IpcChannel.GetRunDiagnosticNodeDetail, { ...scopeA, nodeId: 'tool:ipc-tool-a' }),
+    ).resolves.toMatchObject({ runId: runA, nodeId: 'tool:ipc-tool-a', truncated: false });
+    await expect(
+      invoke(IpcChannel.GetRunDiagnosticNodeDetail, { ...scopeA, nodeId: 'tool:ipc-tool-b' }),
+    ).resolves.toBeNull();
+    await expect(
+      invoke(IpcChannel.GetRunDiagnosticsSummary, {
+        ...scopeA,
+        taskId: taskB.task.id,
+      }),
+    ).resolves.toBeNull();
+    await expect(
+      invoke(IpcChannel.GetRunDiagnosticsSummary, {
+        ...scopeA,
+        workspaceId: workspaceB.id,
+      }),
+    ).resolves.toBeNull();
+    await expect(
+      invoke(IpcChannel.GetRunDiagnosticsSummary, { ...scopeA, runId: 'missing-run' }),
+    ).resolves.toBeNull();
+    await expect(
+      invoke(IpcChannel.ListRunDiagnosticsPage, { ...scopeA, pageSize: 201 }),
+    ).rejects.toMatchObject({ name: 'ZodError' });
+    await expect(
+      invoke(IpcChannel.ListRunDiagnosticsPage, {
+        ...scopeA,
+        cursor: {
+          runId: 'other-run',
+          source: 'core-journal',
+          afterSequence: 1,
+          afterKind: 'tool',
+          afterNodeId: 'tool:ipc-tool-a',
+        },
+      }),
+    ).rejects.toMatchObject({ name: 'ZodError' });
+  });
+
+  it('keeps diagnostic query and output failures as rejected IPC calls', async () => {
+    const workspace = store.workspaces.getOrCreate(
+      path.join(temporaryDirectory, 'diagnostics-errors'),
+      '诊断错误空间',
+    );
+    const task = store.tasks.create(workspace.id, '诊断错误任务', 'synthetic');
+    const runId = 'ipc-diagnostics-error-run';
+    store.runs.create(
+      {
+        id: runId,
+        taskId: task.task.id,
+        sessionId: task.sessionId,
+        prompt: 'synthetic prompt',
+        status: 'running',
+        createdAt: 10,
+      },
+      { version: 1, sections: ['core'] },
+    );
+    const scope = { workspaceId: workspace.id, taskId: task.task.id, runId };
+
+    const queryFailure = vi.spyOn(store.runDiagnostics, 'getSummary').mockImplementation(() => {
+      throw new Error('diagnostic query failed');
+    });
+    await expect(invoke(IpcChannel.GetRunDiagnosticsSummary, scope)).rejects.toThrow(
+      'diagnostic query failed',
+    );
+    queryFailure.mockRestore();
+
+    const malformedOutput = vi
+      .spyOn(store.runDiagnostics, 'getSummary')
+      .mockImplementation(() => ({}) as never);
+    await expect(invoke(IpcChannel.GetRunDiagnosticsSummary, scope)).rejects.toMatchObject({
+      name: 'ZodError',
+    });
+    malformedOutput.mockRestore();
+  });
+
   it('makes an exported file artifact writable when the save panel pre-creates a read-only target', async () => {
     const workspace = store.workspaces.getOrCreate(temporaryDirectory, '文件成果导出');
     const created = store.tasks.create(workspace.id, '导出测试', '验证文件成果导出权限');

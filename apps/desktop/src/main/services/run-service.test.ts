@@ -117,6 +117,7 @@ const createWindowStub = (options?: { focused?: boolean }): WindowStub => {
 
 interface Fixture {
   directory: string;
+  databasePath: string;
   store: AppStore;
   vault: KnowledgeVault;
   skillService: SkillService;
@@ -131,10 +132,11 @@ interface Fixture {
  * 外键约束开启后，Run 必须挂在真实存在的 Task 与 Session 上，
  * 因此夹具要走完整链路建库，不能再塞伪造的 id。
  */
-const createFixture = async (): Promise<Fixture> => {
+const createFixture = async (options: { databaseOnDisk?: boolean } = {}): Promise<Fixture> => {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'betterwork-run-'));
   temporaryDirectories.push(directory);
-  const store = AppStore.open(':memory:');
+  const databasePath = path.join(directory, 'app.sqlite');
+  const store = AppStore.open(options.databaseOnDisk ? databasePath : ':memory:');
   openStores.push(store);
   const vault = new KnowledgeVault(path.join(directory, 'vault.sqlite'));
   openVaults.push(vault);
@@ -152,6 +154,7 @@ const createFixture = async (): Promise<Fixture> => {
   store.taskContinuity.initializeFromTaskGoal(created.task.id);
   return {
     directory,
+    databasePath,
     store,
     vault,
     skillService,
@@ -520,6 +523,46 @@ const wireMessages = (init: RequestInit | undefined): { role: string; content: s
 };
 
 describe('RunService', () => {
+  it('writes the core diagnostics recording marker in the Run creation transaction', async () => {
+    const fixture = await createFixture();
+    const service = createService(fixture);
+    const runId = service.start({
+      taskId: fixture.taskId,
+      sessionId: fixture.sessionId,
+      prompt: '离线检查 Run 记录标记',
+    });
+    const db = (fixture.store as unknown as { db: Database.Database }).db;
+
+    expect(
+      db
+        .prepare(
+          'SELECT diagnostics_recording_version, diagnostics_sections_json FROM runs WHERE id = ?',
+        )
+        .get(runId),
+    ).toEqual({ diagnostics_recording_version: 1, diagnostics_sections_json: '["core"]' });
+    await waitForCompletion(fixture, runId);
+  });
+
+  it('rolls back the Run and its diagnostics marker when the same creation transaction fails', async () => {
+    const fixture = await createFixture();
+    const service = createService(fixture);
+    const createSnapshot = vi
+      .spyOn(fixture.store.runContextSnapshots, 'create')
+      .mockImplementation(() => {
+        throw new Error('synthetic snapshot write failure');
+      });
+
+    expect(() =>
+      service.start({
+        taskId: fixture.taskId,
+        sessionId: fixture.sessionId,
+        prompt: '触发创建事务回滚',
+      }),
+    ).toThrow('synthetic snapshot write failure');
+    expect(createSnapshot).toHaveBeenCalledOnce();
+    expect(fixture.store.runs.list()).toEqual([]);
+  });
+
   it('rejects a partial production assembly before accessing storage or a window', async () => {
     const fixture = await createFixture();
     const getWindow = vi.fn(() => null);
@@ -5372,6 +5415,197 @@ describe('RunService robustness regressions', () => {
       expect(fixture.store.artifacts.list(fixture.taskId)).toHaveLength(1);
     } finally {
       await service.shutdown();
+    }
+  });
+});
+
+describe('AT10 离线跨层执行追踪', () => {
+  it('把多轮、工具、失败、取消和旧 Run 从 RunService/SQLite 重装配到诊断 DTO', async () => {
+    const fixture = await createFixture({ databaseOnDisk: true });
+    const existingArtifact = fixture.store.artifacts.saveMarkdown({
+      taskId: fixture.taskId,
+      origin: 'user-edit',
+      title: '既有成果',
+      content: '保持不变',
+    });
+    const artifactsBefore = fixture.store.artifacts.list(fixture.taskId);
+    const evidenceBefore = fixture.store.evidence.listByTask(fixture.taskId);
+    const fetchMock = vi.fn(async () => {
+      throw new Error('AT10 must not use the network');
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const cancelEntered = createCompletionGate();
+    const cancelReleased = createCompletionGate();
+    let providerMode: 'success' | 'failure' | 'cancel' = 'success';
+    let successCall = 0;
+    const providerSpy = vi
+      .spyOn(FakeModelProvider.prototype, 'stream')
+      .mockImplementation((request) => {
+        if (providerMode === 'failure') {
+          return (async function* () {
+            yield { type: 'text-delta' as const, delta: '' };
+            throw new Error('synthetic provider failure');
+          })();
+        }
+        if (providerMode === 'cancel') {
+          return (async function* () {
+            cancelEntered.resolve();
+            await cancelReleased.promise;
+            if (request.signal.aborted) throw abortError();
+            yield { type: 'text-delta' as const, delta: '意外继续' };
+            yield { type: 'done' as const };
+          })();
+        }
+        const call = successCall;
+        successCall += 1;
+        return (async function* () {
+          if (call === 0) {
+            yield {
+              type: 'tool-call' as const,
+              toolCall: {
+                id: 'at10-calculator',
+                name: 'calculator',
+                input: { expression: '2 + 2' },
+              },
+            };
+            yield { type: 'done' as const, finishReason: 'tool-calls' as const };
+            return;
+          }
+          yield { type: 'text-delta' as const, delta: '合成结果：4。' };
+          yield {
+            type: 'done' as const,
+            finishReason: 'stop' as const,
+            usage: { promptTokens: 12, completionTokens: 6, totalTokens: 18 },
+          };
+        })();
+      });
+    const service = createService(fixture);
+    let serviceStopped = false;
+
+    try {
+      const completedRunId = service.start({
+        taskId: fixture.taskId,
+        sessionId: fixture.sessionId,
+        prompt: '用计算器验证 2 + 2。',
+      });
+      await waitForCompletion(fixture, completedRunId);
+      expect(statusOf(fixture, completedRunId)).toBe('completed');
+
+      providerMode = 'failure';
+      const failedRunId = service.start({
+        taskId: fixture.taskId,
+        sessionId: fixture.sessionId,
+        prompt: '验证 Provider 失败收口。',
+      });
+      await waitForCompletion(fixture, failedRunId);
+      expect(statusOf(fixture, failedRunId)).toBe('failed');
+
+      providerMode = 'cancel';
+      const cancelledRunId = service.start({
+        taskId: fixture.taskId,
+        sessionId: fixture.sessionId,
+        prompt: '验证 Provider 调用取消。',
+      });
+      await cancelEntered.promise;
+      expect(service.cancel(cancelledRunId)).toBe(true);
+      cancelReleased.resolve();
+      await waitForCompletion(fixture, cancelledRunId);
+      expect(statusOf(fixture, cancelledRunId)).toBe('cancelled');
+
+      const legacyRunId = 'at10-legacy-run';
+      fixture.store.runs.create({
+        id: legacyRunId,
+        taskId: fixture.taskId,
+        sessionId: fixture.sessionId,
+        prompt: '合成旧 Run',
+        status: 'running',
+        createdAt: Date.now() - 1_000,
+      });
+      expect(fixture.store.runs.failInterruptedRuns('合成旧 Run 中断', Date.now())).toBe(1);
+
+      const existingArtifactVersion = fixture.store.artifacts.listVersions(existingArtifact.id)[0];
+      if (!existingArtifactVersion) throw new Error('existing artifact version missing');
+      expect(fixture.store.artifacts.getVersionDetail(existingArtifactVersion.id)).toMatchObject({
+        id: existingArtifactVersion.id,
+        content: '保持不变',
+      });
+      expect(fixture.store.artifacts.list(fixture.taskId)).toEqual(artifactsBefore);
+      expect(fixture.store.evidence.listByTask(fixture.taskId)).toEqual(evidenceBefore);
+      expect(fetchMock).not.toHaveBeenCalled();
+
+      await service.shutdown();
+      serviceStopped = true;
+      const previousStore = fixture.store;
+      const previousStoreIndex = openStores.indexOf(previousStore);
+      if (previousStoreIndex >= 0) openStores.splice(previousStoreIndex, 1);
+      previousStore.close();
+      fixture.store = AppStore.open(fixture.databasePath);
+      openStores.push(fixture.store);
+
+      const completedPage = fixture.store.runDiagnostics.getPage({
+        runId: completedRunId,
+        pageSize: 20,
+      });
+      expect(completedPage).toMatchObject({
+        integrity: 'complete',
+        summary: {
+          status: 'completed',
+          modelCallCount: 2,
+          toolCallCount: 1,
+          toolExecutionCount: 1,
+          usage: {
+            promptTokens: { knownSubtotal: '12', knownCallCount: 1, missingCallCount: 1 },
+            completionTokens: { knownSubtotal: '6', knownCallCount: 1, missingCallCount: 1 },
+            totalTokens: { knownSubtotal: '18', knownCallCount: 1, missingCallCount: 1 },
+          },
+        },
+      });
+      expect(completedPage?.nodes).toContainEqual(
+        expect.objectContaining({ id: 'round:0', kind: 'round', status: 'completed' }),
+      );
+      expect(completedPage?.nodes).toContainEqual(
+        expect.objectContaining({
+          id: 'tool:at10-calculator',
+          kind: 'tool',
+          parentId: 'round:0',
+          modelCallId: expect.any(String),
+          status: 'completed',
+          executionState: 'started',
+        }),
+      );
+      expect(completedPage?.nodes.filter((node) => node.kind === 'model')).toHaveLength(2);
+      const toolOnlyModel = completedPage?.nodes.find(
+        (node) => node.kind === 'model' && node.round === 0,
+      );
+      expect(toolOnlyModel).toBeDefined();
+      expect(toolOnlyModel).not.toHaveProperty('timeToFirstTextMs');
+      expect(completedPage).not.toHaveProperty('prompt');
+      expect(fixture.store.runDiagnostics.getSummary(failedRunId)).toMatchObject({
+        status: 'failed',
+        integrity: 'complete',
+      });
+      expect(fixture.store.runDiagnostics.getPage({ runId: failedRunId })?.nodes).toContainEqual(
+        expect.objectContaining({ kind: 'model', status: 'failed' }),
+      );
+      expect(fixture.store.runDiagnostics.getSummary(cancelledRunId)).toMatchObject({
+        status: 'cancelled',
+        integrity: 'complete',
+      });
+      expect(fixture.store.runDiagnostics.getPage({ runId: cancelledRunId })?.nodes).toContainEqual(
+        expect.objectContaining({ kind: 'model', status: 'cancelled' }),
+      );
+      expect(fixture.store.runDiagnostics.getSummary(legacyRunId)).toMatchObject({
+        status: 'failed',
+        integrity: 'unavailable',
+      });
+      expect(fixture.store.runContextSnapshots.get(completedRunId)).toBeDefined();
+      expect(fixture.store.artifacts.list(fixture.taskId)).toEqual(artifactsBefore);
+      expect(fixture.store.evidence.listByTask(fixture.taskId)).toEqual(evidenceBefore);
+    } finally {
+      cancelReleased.resolve();
+      providerSpy.mockRestore();
+      if (!serviceStopped) await service.shutdown();
     }
   });
 });

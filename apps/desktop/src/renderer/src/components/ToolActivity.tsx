@@ -13,6 +13,7 @@ const statusLabel = {
   running: '执行中',
   completed: '已完成',
   failed: '失败',
+  rejected: '未执行',
   cancelled: '已停止',
 } as const;
 
@@ -53,10 +54,19 @@ export function ToolActivity({
   const tools = useMemo(() => deriveToolActivity(events), [events]);
   if (tools.length === 0) return null;
   const failed = tools.filter((tool) => tool.status === 'failed').length;
+  const rejected = tools.filter((tool) => tool.status === 'rejected').length;
   const cancelled = tools.filter((tool) => tool.status === 'cancelled').length;
   const running = tools.find((tool) => tool.status === 'running' || tool.status === 'pending');
   const selected = tools.find((tool) => tool.id === selectedId);
-  const status = running ? 'running' : failed ? 'failed' : cancelled ? 'cancelled' : 'completed';
+  const status = running
+    ? 'running'
+    : failed
+      ? 'failed'
+      : rejected
+        ? 'rejected'
+        : cancelled
+          ? 'cancelled'
+          : 'completed';
   return (
     <div className={`tool-activity ${status}`}>
       <button
@@ -68,7 +78,7 @@ export function ToolActivity({
       >
         {running ? (
           <span className="status-dot running" />
-        ) : failed || cancelled ? (
+        ) : failed || rejected || cancelled ? (
           <AlertIcon size={13} />
         ) : (
           <CheckIcon size={13} />
@@ -77,6 +87,7 @@ export function ToolActivity({
           {running ? `正在${toolStageLabel(running.name)}` : '工作过程'} · {tools.length} 步
         </span>
         {failed > 0 && <span className="tool-failure-count">{failed} 次失败</span>}
+        {rejected > 0 && <span>{rejected} 次未执行</span>}
         {cancelled > 0 && <span>{cancelled} 步已停止</span>}
         <ChevronRightIcon size={13} />
       </button>

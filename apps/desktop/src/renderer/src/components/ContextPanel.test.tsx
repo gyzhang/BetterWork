@@ -254,6 +254,7 @@ const renderPanel = (
   const props = {
     open: true,
     setOpen: vi.fn(),
+    workspaceId: undefined,
     taskId: 'task-1',
     taskContinuity: taskContinuityState(),
     tab: 'memory' as ContextTab,
@@ -303,6 +304,7 @@ const renderPanel = (
       tab={props.tab}
       setTab={props.setTab}
       process={{
+        workspaceId: props.workspaceId,
         taskId: props.taskId,
         taskContinuity: props.taskContinuity,
         events: props.events,
@@ -414,6 +416,10 @@ const taskContinuityState = (
 
 afterEach(() => {
   cleanup();
+  Object.defineProperty(window, 'betterwork', {
+    configurable: true,
+    value: { knowledge: { previewRunSource } },
+  });
 });
 
 describe('ContextPanel 本任务连续简报', () => {
@@ -953,6 +959,117 @@ describe('ContextPanel 按运行回看来源', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: '关闭' }));
     expect(screen.queryByRole('note')).toBeNull();
+  });
+});
+
+describe('ContextPanel 执行详情入口（AT09）', () => {
+  it('当前和历史 Run 走相同 scoped 查询；关闭、重开、切 Task 或收起面板不取消 Run', async () => {
+    const runningRun: RunSummary = {
+      id: 'run-current',
+      taskId: 'task-1',
+      sessionId: 'session-1',
+      prompt: '正在进行的研究',
+      status: 'running',
+      createdAt: 2,
+    };
+    const historyRun: RunSummary = {
+      id: 'run-history',
+      taskId: 'task-1',
+      sessionId: 'session-1',
+      prompt: '上期研究',
+      status: 'completed',
+      createdAt: 1,
+      completedAt: 2,
+    };
+    const diagnosticsFor = (runId: string, status: RunSummary['status']) => ({
+      runId,
+      taskId: 'task-1',
+      sessionId: 'session-1',
+      status,
+      modelCallCount: 0,
+      toolCallCount: 0,
+      toolExecutionCount: 0,
+      failedToolExecutionCount: 0,
+      rejectedToolCallCount: 0,
+      usage: {
+        promptTokens: { knownSubtotal: '0', knownCallCount: 0, missingCallCount: 0 },
+        completionTokens: { knownSubtotal: '0', knownCallCount: 0, missingCallCount: 0 },
+        totalTokens: { knownSubtotal: '0', knownCallCount: 0, missingCallCount: 0 },
+      },
+      integrity: 'complete' as const,
+    });
+    const getDiagnosticsSummary = vi.fn(({ runId }: { runId: string }) =>
+      Promise.resolve(diagnosticsFor(runId, runId === runningRun.id ? 'running' : 'completed')),
+    );
+    const listDiagnosticsPage = vi.fn(({ runId }: { runId: string }) =>
+      Promise.resolve({
+        summary: diagnosticsFor(runId, runId === runningRun.id ? 'running' : 'completed'),
+        nodes: [],
+        integrity: 'complete' as const,
+      }),
+    );
+    const unsubscribe = vi.fn();
+    const cancelRun = vi.fn();
+    Object.defineProperty(window, 'betterwork', {
+      configurable: true,
+      value: {
+        runs: {
+          getDiagnosticsSummary,
+          listDiagnosticsPage,
+          getDiagnosticNodeDetail: vi.fn().mockResolvedValue(null),
+          listEvents: vi.fn().mockResolvedValue([]),
+          onEvent: vi.fn(() => unsubscribe),
+          cancel: cancelRun,
+        },
+      },
+    });
+
+    const options = {
+      tab: 'process',
+      workspaceId: 'workspace-1',
+      taskId: 'task-1',
+      activeRun: runningRun,
+      taskRuns: [runningRun, historyRun],
+      events: [],
+    };
+    const container = renderPanel(options);
+    fireEvent.click(screen.getByRole('button', { name: '查看当前 Run 的执行详情' }));
+    expect(await screen.findByRole('dialog', { name: '执行详情' })).toBeTruthy();
+    await waitFor(() => expect(getDiagnosticsSummary).toHaveBeenCalledTimes(1));
+    expect(getDiagnosticsSummary).toHaveBeenNthCalledWith(1, {
+      workspaceId: 'workspace-1',
+      taskId: 'task-1',
+      runId: runningRun.id,
+    });
+    fireEvent.click(screen.getByRole('button', { name: '关闭' }));
+    expect(screen.queryByRole('dialog', { name: '执行详情' })).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: '查看当前 Run 的执行详情' }));
+    expect(await screen.findByRole('dialog', { name: '执行详情' })).toBeTruthy();
+    await waitFor(() => expect(getDiagnosticsSummary).toHaveBeenCalledTimes(2));
+    fireEvent.click(screen.getByRole('button', { name: '关闭' }));
+
+    fireEvent.click(screen.getByText('执行记录 · 2 次'));
+    fireEvent.click(screen.getByRole('button', { name: '查看 Run「上期研究」的执行详情' }));
+    expect(await screen.findByRole('dialog', { name: '执行详情' })).toBeTruthy();
+    await waitFor(() => expect(getDiagnosticsSummary).toHaveBeenCalledTimes(3));
+    expect(getDiagnosticsSummary).toHaveBeenNthCalledWith(3, {
+      workspaceId: 'workspace-1',
+      taskId: 'task-1',
+      runId: historyRun.id,
+    });
+
+    renderPanel({ ...options, taskId: 'task-2', taskRuns: [], activeRun: undefined }, container);
+    expect(screen.queryByRole('dialog', { name: '执行详情' })).toBeNull();
+    expect(unsubscribe).toHaveBeenCalled();
+    expect(cancelRun).not.toHaveBeenCalled();
+
+    renderPanel(options, container);
+    fireEvent.click(screen.getByRole('button', { name: '查看当前 Run 的执行详情' }));
+    expect(await screen.findByRole('dialog', { name: '执行详情' })).toBeTruthy();
+    renderPanel({ ...options, open: false }, container);
+    expect(screen.queryByRole('dialog', { name: '执行详情' })).toBeNull();
+    expect(cancelRun).not.toHaveBeenCalled();
   });
 });
 

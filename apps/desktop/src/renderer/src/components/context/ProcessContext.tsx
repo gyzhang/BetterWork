@@ -1,6 +1,7 @@
 import type {
   AgentRuntimeEvent,
   ArtifactSummary,
+  RunDiagnosticsScopeRequest,
   RunSummary,
   TaskContinuityBrief,
 } from '@betterwork/agent-protocol';
@@ -32,8 +33,10 @@ import { StatusNote } from '../StatusNote';
 import { TextArea } from '../TextField';
 import { ToolActivity } from '../ToolActivity';
 import type { ToastTone } from '../TransientToast';
+import { RunExecutionDetails } from './RunExecutionDetails';
 
 export interface ProcessContextProps {
+  workspaceId?: string | undefined;
   taskId?: string | undefined;
   taskContinuity: TaskContinuityState;
   taskRuns: RunSummary[];
@@ -47,6 +50,7 @@ export interface ProcessContextProps {
 }
 
 export function ProcessContext({
+  workspaceId,
   taskId,
   taskContinuity,
   taskRuns,
@@ -58,6 +62,64 @@ export function ProcessContext({
   activityGroups,
   onError,
 }: ProcessContextProps): React.JSX.Element {
+  const [detailsScope, setDetailsScope] = useState<RunDiagnosticsScopeRequest>();
+  const activeRunForTask = activeRun?.taskId === taskId ? activeRun : undefined;
+  const historyRuns = taskRuns.filter((run) => run.taskId === taskId);
+  const showHistory =
+    historyRuns.length > 1 || (historyRuns.length > 0 && activeRunForTask === undefined);
+
+  useEffect(() => {
+    setDetailsScope(undefined);
+  }, [taskId, workspaceId]);
+
+  const openRunDetails = (runId: string): void => {
+    if (!workspaceId || !taskId) return;
+    setDetailsScope({ workspaceId, taskId, runId });
+  };
+
+  const currentDetailsAction =
+    workspaceId && taskId && activeRunForTask ? (
+      <Button
+        variant="secondary"
+        size="sm"
+        type="button"
+        aria-label="查看当前 Run 的执行详情"
+        className="activity-summary-action"
+        onClick={() => openRunDetails(activeRunForTask.id)}
+      >
+        执行详情
+      </Button>
+    ) : undefined;
+
+  const history = showHistory ? (
+    <Disclosure className="task-run-history" label={`执行记录 · ${historyRuns.length} 次`}>
+      {historyRuns.map((run) => (
+        <div className="task-run-history-entry" key={run.id}>
+          <RunSummaryRow
+            run={run}
+            title={run.prompt}
+            action="查看执行记录"
+            selected={run.id === activeRunForTask?.id}
+            onSelect={() => onSelectRun(run)}
+          />
+          {workspaceId && taskId && (
+            <Button
+              variant="link"
+              size="sm"
+              type="button"
+              aria-label={`查看 Run「${run.prompt}」的执行详情`}
+              onClick={() => openRunDetails(run.id)}
+            >
+              执行详情
+            </Button>
+          )}
+        </div>
+      ))}
+    </Disclosure>
+  ) : undefined;
+
+  const hasProcessContent = events.length > 0 || activeRunForTask !== undefined || showHistory;
+
   return (
     <>
       {taskId && (
@@ -71,7 +133,7 @@ export function ProcessContext({
           onError={onError}
         />
       )}
-      {events.length === 0 ? (
+      {!hasProcessContent ? (
         <EmptyContext
           placement="start"
           title="等待任务开始"
@@ -79,33 +141,46 @@ export function ProcessContext({
         />
       ) : (
         <div className="activity-list">
-          <div className="activity-summary">
-            <span className={`status-dot ${activeRun?.status === 'running' ? 'running' : ''}`} />
-            <div>
-              <strong>{activeRun ? runStatusName[activeRun.status] : '正在处理任务'}</strong>
-              <p>{activityGroups.length} 个工作阶段</p>
+          {(events.length > 0 || activeRunForTask) && (
+            <div className="activity-summary">
+              <span
+                className={`status-dot ${activeRunForTask?.status === 'running' ? 'running' : ''}`}
+              />
+              <div>
+                <strong>
+                  {activeRunForTask ? runStatusName[activeRunForTask.status] : '正在处理任务'}
+                </strong>
+                <p>{activityGroups.length} 个工作阶段</p>
+              </div>
+              {currentDetailsAction}
             </div>
-          </div>
-          {activityGroups.map((group) => (
-            <ActivityGroupRow group={group} key={group.id} />
-          ))}
-          <ToolActivity key={activeRun?.id ?? events[0]?.runId} events={events} />
-          {taskRuns.length > 1 && (
-            <Disclosure className="task-run-history" label={`执行记录 · ${taskRuns.length} 次`}>
-              {taskRuns.map((run) => (
-                <RunSummaryRow
-                  key={run.id}
-                  run={run}
-                  title={run.prompt}
-                  action="查看执行记录"
-                  selected={run.id === activeRun?.id}
-                  onSelect={() => onSelectRun(run)}
-                />
-              ))}
-            </Disclosure>
           )}
+          {events.length === 0 ? (
+            <EmptyContext
+              placement="start"
+              title={activeRunForTask ? '过程事件尚未到达' : '暂无当前过程事件'}
+              detail={
+                activeRunForTask
+                  ? 'Run 已开始，过程数据仍在同步；可以先查看当前执行详情。'
+                  : '可从执行记录打开当前 Task 的历史 Run。'
+              }
+            />
+          ) : (
+            <>
+              {activityGroups.map((group) => (
+                <ActivityGroupRow group={group} key={group.id} />
+              ))}
+              <ToolActivity key={activeRunForTask?.id ?? events[0]?.runId} events={events} />
+            </>
+          )}
+          {history}
         </div>
       )}
+      {detailsScope &&
+        detailsScope.workspaceId === workspaceId &&
+        detailsScope.taskId === taskId && (
+          <RunExecutionDetails scope={detailsScope} onClose={() => setDetailsScope(undefined)} />
+        )}
     </>
   );
 }

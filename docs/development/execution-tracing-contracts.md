@@ -1,6 +1,6 @@
 # Run 执行追踪实施契约
 
-- 版本：v0.1 Proposed；2026-10-16 用户接受产品方向并要求开发卡。本轮只编制文档，产品代码未开工。
+- 版本：v0.1 Proposed；2026-10-16 用户接受产品方向并要求开发卡。AT-M1 实施按本契约推进；技术提案状态仍以 ADR-0050 为准。
 - 依据：[调研报告](../reviews/2026-10-16-agent-execution-tracing-analysis.md)、[ADR-0050](../adr/0050-run-execution-diagnostics.md)、[UI/UX](../10-ui-ux-system.md)、[工程规范](../12-engineering-standards.md)。
 - 职责：本文拥有本增量的字段与行为口径；[AT 任务板](tasks-execution-tracing.md)拥有状态/证据；[Luna 交接](execution-tracing-coding-prompts.md)拥有可复制执行指令。不得从历史任务板复制旧的 verify/UI 运行要求。
 
