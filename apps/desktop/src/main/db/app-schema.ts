@@ -2282,6 +2282,24 @@ export const appMigrations: readonly Migration[] = [
       }
     },
   },
+  {
+    version: 47,
+    name: 'support multiple roles per model profile',
+    up(db: Database.Database): void {
+      db.exec(`
+        CREATE TABLE model_profile_roles (
+          profile_id TEXT NOT NULL REFERENCES model_profiles(id) ON DELETE CASCADE,
+          role TEXT NOT NULL CHECK (role IN ('language', 'vision', 'embedding')),
+          priority INTEGER NOT NULL CHECK (priority >= 0),
+          PRIMARY KEY (profile_id, role)
+        );
+        CREATE INDEX idx_model_profile_roles_role_priority
+          ON model_profile_roles(role, priority, profile_id);
+        INSERT INTO model_profile_roles (profile_id, role, priority)
+          SELECT id, role, priority FROM model_profiles;
+      `);
+    },
+  },
 ];
 
 /**

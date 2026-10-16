@@ -42,7 +42,7 @@ const seeded = (): Ctx => {
     provider: 'openai-compatible',
     baseUrl: 'https://example.invalid/v1',
     model: 'gpt-x',
-    role: 'language',
+    roles: ['language'],
     apiKey: 'sk-model-123',
     enabled: true,
     maxContextTokens: 8192,

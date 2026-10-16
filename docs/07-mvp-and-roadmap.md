@@ -6,6 +6,10 @@
 
 [ADR-0050](adr/0050-run-execution-diagnostics.md)与[实施契约](development/execution-tracing-contracts.md)为 Proposed，提出 Core 事件与宿主诊断独立定序、查询时关联；[AT00–AT25 唯一任务板](development/tasks-execution-tracing.md)和[Luna 目标提示词](development/execution-tracing-coding-prompts.md)已归档。本次只做开发准备，后续目标明确采用技术提案并授权相应范围后开工；AT01–AT22 为完整离线范围，真实 UI/真实模型验收与可选 OTLP 出口分别派发。提交、推送与发布继续独立授权，不改写其他任务系列状态。
 
+## 模型配置支持多角色 — 2026-10-16（已验收）
+
+光哥指出 DeepSeek 4.1 同时承担语言与视觉用途，要求模型角色可多选。单个 ModelProfile 可选择语言、视觉和嵌入角色的任意非空组合，各角色的默认顺序独立保存；已有单角色配置经 v47 迁移后继续保留原角色和顺序。连通性测试按所选用途测试聊天接口与 Embeddings 接口。此功能只完善角色配置和默认选择，不代表视觉图像理解执行链路已经落地；技术决定见 [ADR-0051](adr/0051-model-profile-multiple-roles.md)。
+
 ## 首批内置研究与汇报资源 — 2026-10-15（本分支已实现，待打包和人工验收）
 
 2026-10-15 用户重新选择首批内置内容为「研究与汇报」Expert 与其 `ppt-generation-expert` Skill。此前移除旧样本、保持空发布清单的决定是当时的发布状态；本次授权后，当前分支已将新资源登记到两份清单。Expert 使用当前 Task 已选择且运行时允许读取的内部材料，按需使用已配置的 `web_search` / `web_fetch`，并引用当前 Run 实际获得的 Evidence。默认报告结构包括摘要与核心发现、研究问题和范围、证据与分析、不确定点、行动建议及来源清单；明确区分内部材料事实、公开来源主张、分析推断和建议。Expert 使用应用默认语言模型，绑定 Skill、`knowledge_search`、`read_text_file`、`read_office_material`、`web_search` 和 `web_fetch`；内部检索复用现有知识检索设置，在语义检索已启用且向量索引可用时可使用已配置的嵌入模型。Expert 不单独绑定嵌入模型，不绑定经营分析工具或 MCP。首批保持通用定位，不加入行业垂直样本或 Expert Kit。

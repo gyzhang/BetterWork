@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-import type { BetterWorkDesktopApi } from '@betterwork/agent-protocol';
+import type { BetterWorkDesktopApi, ModelRole } from '@betterwork/agent-protocol';
 import { IpcChannel } from '@betterwork/agent-protocol';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -1329,10 +1329,10 @@ describe('model preload API', () => {
       provider: 'openai-compatible',
       baseUrl: 'https://api.example.com/v1',
       model: 'model-a',
-      role: 'language' as const,
+      roles: ['language' as ModelRole],
+      rolePriorities: { language: 0 },
       apiKeyConfigured: true,
       enabled: true,
-      priority: 0,
       connectionStatus: 'connected' as const,
       maxContextTokens: 8192,
       maxOutputTokens: 1024,
@@ -1345,18 +1345,17 @@ describe('model preload API', () => {
       provider: 'openai-compatible',
       baseUrl: 'https://api.example.com/v1',
       model: 'model-a',
-      role: 'language' as const,
+      roles: ['language' as ModelRole],
       apiKey: '',
       maxContextTokens: 8192,
       maxOutputTokens: 1024,
       temperature: 0.7,
       enabled: true,
-      priority: 0,
     };
     const testInput = {
       baseUrl: 'https://api.example.com/v1',
       model: 'model-a',
-      role: 'language' as const,
+      roles: ['language' as ModelRole],
       apiKey: '',
     };
     mocks.invoke.mockImplementation(async (channel) => {
@@ -1378,7 +1377,7 @@ describe('model preload API', () => {
     await Promise.all([
       api().models.save(saveInput),
       api().models.delete({ id: 'model-1' }),
-      api().models.setDefault({ id: 'model-1' }),
+      api().models.setDefault({ id: 'model-1', role: 'language' }),
       api().models.setEnabled({ id: 'model-1', enabled: false }),
       api().models.test(testInput),
     ]);
@@ -1390,7 +1389,7 @@ describe('model preload API', () => {
       [IpcChannel.ListModels, {}],
       [IpcChannel.SaveModel, saveInput],
       [IpcChannel.DeleteModel, { id: 'model-1' }],
-      [IpcChannel.SetDefaultModel, { id: 'model-1' }],
+      [IpcChannel.SetDefaultModel, { id: 'model-1', role: 'language' }],
       [IpcChannel.SetModelEnabled, { id: 'model-1', enabled: false }],
       [IpcChannel.TestModel, testInput],
     ]);
@@ -1402,24 +1401,23 @@ describe('model preload API', () => {
       provider: 'openai-compatible',
       baseUrl: 'https://api.example.com/v1',
       model: 'model-a',
-      role: 'language' as const,
+      roles: ['language' as ModelRole],
       apiKey: '',
       maxContextTokens: 8192,
       maxOutputTokens: 1024,
       temperature: 0.7,
       enabled: true,
-      priority: 0,
     };
     const testInput = {
       baseUrl: 'https://api.example.com/v1',
       model: 'model-a',
-      role: 'language' as const,
+      roles: ['language' as ModelRole],
       apiKey: '',
     };
 
     expect(() => api().models.save({ ...saveInput, name: '' })).toThrow();
     expect(() => api().models.delete({ id: '' })).toThrow();
-    expect(() => api().models.setDefault({ id: '' })).toThrow();
+    expect(() => api().models.setDefault({ id: '', role: 'language' })).toThrow();
     expect(() => api().models.setEnabled({ id: '', enabled: false })).toThrow();
     expect(() => api().models.test({ ...testInput, baseUrl: '' })).toThrow();
     expect(mocks.invoke).not.toHaveBeenCalled();
@@ -1428,7 +1426,7 @@ describe('model preload API', () => {
     await expect(api().models.list()).rejects.toThrow();
     await expect(api().models.save(saveInput)).rejects.toThrow();
     await expect(api().models.delete({ id: 'model-1' })).rejects.toThrow();
-    await expect(api().models.setDefault({ id: 'model-1' })).rejects.toThrow();
+    await expect(api().models.setDefault({ id: 'model-1', role: 'language' })).rejects.toThrow();
     await expect(api().models.setEnabled({ id: 'model-1', enabled: false })).rejects.toThrow();
     await expect(api().models.test(testInput)).rejects.toThrow();
     expect(mocks.invoke).toHaveBeenCalledTimes(6);

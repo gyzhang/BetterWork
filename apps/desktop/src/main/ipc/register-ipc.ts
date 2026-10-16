@@ -1274,7 +1274,7 @@ function registerModelChannels({ store, credentialAccess }: IpcDependencies): vo
     setDefaultModelRequestSchema,
     updatedResultSchema,
     (input) => ({
-      updated: store.models.setDefault(input.id),
+      updated: store.models.setDefault(input.id, input.role),
     }),
   );
   handleInput(
@@ -1303,7 +1303,7 @@ function registerModelChannels({ store, credentialAccess }: IpcDependencies): vo
       const result = await probeModelConnection({
         baseUrl: input.baseUrl,
         model: input.model,
-        role: input.role,
+        roles: input.roles,
         apiKey: input.apiKey || storedKey,
       });
       if (input.id) store.models.recordConnection(input.id, result.ok ? 'connected' : 'failed');

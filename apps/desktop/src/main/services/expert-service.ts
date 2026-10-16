@@ -335,7 +335,7 @@ export class ExpertService {
     if (expert.revision.modelReference.mode === 'profile') {
       const model = this.store.models.getWithSecret(expert.revision.modelReference.modelProfileId);
       if (!model) addReason(blockedReasons, 'missing-model');
-      else if (!model.enabled || model.role !== 'language')
+      else if (!model.enabled || !model.roles.includes('language'))
         addReason(blockedReasons, 'model-disabled');
     }
     if (expert.revision.builtinToolPolicy.mode === 'allow-list') {

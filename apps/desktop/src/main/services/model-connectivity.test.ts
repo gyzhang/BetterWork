@@ -2,10 +2,10 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { probeModelConnection, resolveEndpoint } from './model-connectivity';
 
-type FetchMock = ReturnType<typeof vi.fn>;
+type FetchMock = ReturnType<typeof vi.fn<typeof fetch>>;
 
 const stubFetch = (responder: () => Response | Promise<Response>): FetchMock => {
-  const fetchMock = vi.fn(async () => responder());
+  const fetchMock = vi.fn<typeof fetch>(async () => responder());
   vi.stubGlobal('fetch', fetchMock);
   return fetchMock;
 };
@@ -17,18 +17,18 @@ const initOf = (fetchMock: FetchMock): RequestInit => {
 };
 
 const target = (overrides?: {
-  role?: 'language' | 'vision' | 'embedding';
+  roles?: Array<'language' | 'vision' | 'embedding'>;
   apiKey?: string;
   baseUrl?: string;
 }): {
   baseUrl: string;
   model: string;
-  role: 'language' | 'vision' | 'embedding';
+  roles: Array<'language' | 'vision' | 'embedding'>;
   apiKey: string;
 } => ({
   baseUrl: 'https://host/v1',
   model: 'test-model',
-  role: 'language',
+  roles: ['language'],
   apiKey: 'secret-key',
   ...overrides,
 });
@@ -46,6 +46,12 @@ describe('resolveEndpoint', () => {
     );
     expect(resolveEndpoint('https://host/v1/embeddings/', 'embedding')).toBe(
       'https://host/v1/embeddings',
+    );
+    expect(resolveEndpoint('https://host/v1/chat/completions', 'embedding')).toBe(
+      'https://host/v1/embeddings',
+    );
+    expect(resolveEndpoint('https://host/v1/embeddings', 'language')).toBe(
+      'https://host/v1/chat/completions',
     );
   });
 
@@ -69,11 +75,39 @@ describe('probeModelConnection', () => {
 
   it('uses the embedding wording and body for embedding models', async () => {
     const fetchMock = stubFetch(() => new Response('{}', { status: 200 }));
-    const result = await probeModelConnection(target({ role: 'embedding' }));
+    const result = await probeModelConnection(target({ roles: ['embedding'] }));
     expect(result).toEqual({ ok: true, message: 'Embedding 模型连接成功' });
     const body = JSON.parse(String(initOf(fetchMock).body)) as Record<string, unknown>;
     expect(body.input).toBe('算台连接测试');
     expect(body.messages).toBeUndefined();
+  });
+
+  it('tests chat and embedding endpoints once each for a multi-role model', async () => {
+    const fetchMock = stubFetch(() => new Response('{}', { status: 200 }));
+    const result = await probeModelConnection(
+      target({ roles: ['language', 'vision', 'embedding'] }),
+    );
+
+    expect(result).toEqual({ ok: true, message: '聊天与 Embedding 模型连接成功' });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      'https://host/v1/chat/completions',
+      'https://host/v1/embeddings',
+    ]);
+    const bodies = fetchMock.mock.calls.map(
+      ([, init]) => JSON.parse(String((init as RequestInit).body)) as Record<string, unknown>,
+    );
+    expect(bodies[0]).toHaveProperty('messages');
+    expect(bodies[1]).toHaveProperty('input', '算台连接测试');
+  });
+
+  it('identifies which interface failed for a multi-role model', async () => {
+    let call = 0;
+    const fetchMock = stubFetch(() => new Response('{}', { status: ++call === 1 ? 200 : 503 }));
+    const result = await probeModelConnection(target({ roles: ['language', 'embedding'] }));
+
+    expect(result).toEqual({ ok: false, message: 'Embedding 接口：连接失败（HTTP 503）' });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it('omits the authorization header when no key is configured', async () => {

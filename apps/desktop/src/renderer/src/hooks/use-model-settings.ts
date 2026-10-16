@@ -1,18 +1,18 @@
-import type { ModelProfileInput, ModelProfileSummary } from '@betterwork/agent-protocol';
+import type { ModelProfileInput, ModelProfileSummary, ModelRole } from '@betterwork/agent-protocol';
 import { type FormEvent, useCallback, useMemo, useState } from 'react';
 
 import { reportAction, trackAction } from '../lib/async-action';
 import { emptyModel, roleName } from '../lib/labels';
 import { type TransientToastMessage, useTransientToast } from './use-transient-toast';
 
-export type ModelFilter = ModelProfileSummary['role'] | 'all';
+export type ModelFilter = ModelRole | 'all';
 
 export interface ModelSettings {
   models: ModelProfileSummary[];
   filteredModels: ModelProfileSummary[];
   filter: ModelFilter;
   setFilter: (filter: ModelFilter) => void;
-  defaultModelIds: Map<ModelProfileSummary['role'], string | undefined>;
+  defaultModelIds: Map<ModelRole, string | undefined>;
   activeLanguageModel: ModelProfileSummary | undefined;
   toast: TransientToastMessage | undefined;
   error: string;
@@ -28,11 +28,11 @@ export interface ModelSettings {
   onSave: (event: FormEvent) => Promise<void>;
   onTest: () => Promise<void>;
   onToggle: (model: ModelProfileSummary) => void;
-  onSetDefault: (model: ModelProfileSummary) => void;
+  onSetDefault: (model: ModelProfileSummary, role: ModelRole) => void;
   onDelete: (model: ModelProfileSummary) => void;
 }
 
-const ROLES = ['language', 'vision', 'embedding'] as const;
+const ROLES: readonly ModelRole[] = ['language', 'vision', 'embedding'];
 
 /**
  * 模型配置的界面状态与动作。
@@ -54,18 +54,24 @@ export function useModelSettings(): ModelSettings {
     trackAction(window.betterwork.models.list().then(setModels), '刷新模型配置');
   }, []);
 
-  const filteredModels = models.filter((model) => filter === 'all' || model.role === filter);
-  const activeLanguageModel = models.find((model) => model.role === 'language' && model.enabled);
+  const filteredModels = models.filter((model) => filter === 'all' || model.roles.includes(filter));
   const defaultModelIds = useMemo(
     () =>
       new Map(
-        ROLES.map((role) => [
-          role,
-          models.find((model) => model.role === role && model.enabled)?.id,
-        ]),
+        ROLES.map((role) => {
+          const candidates = models
+            .filter((model) => model.enabled && model.roles.includes(role))
+            .sort(
+              (left, right) =>
+                (left.rolePriorities[role] ?? Number.MAX_SAFE_INTEGER) -
+                (right.rolePriorities[role] ?? Number.MAX_SAFE_INTEGER),
+            );
+          return [role, candidates[0]?.id] as const;
+        }),
       ),
     [models],
   );
+  const activeLanguageModel = models.find((model) => model.id === defaultModelIds.get('language'));
 
   const openEditor = (model?: ModelProfileSummary): void => {
     setError('');
@@ -76,13 +82,12 @@ export function useModelSettings(): ModelSettings {
         provider: model.provider,
         baseUrl: model.baseUrl,
         model: model.model,
-        role: model.role,
+        roles: model.roles,
         apiKey: '',
         maxContextTokens: model.maxContextTokens,
         maxOutputTokens: model.maxOutputTokens,
         temperature: model.temperature,
         enabled: model.enabled,
-        priority: model.priority,
       });
     } else {
       setEditingModelId(undefined);
@@ -134,11 +139,11 @@ export function useModelSettings(): ModelSettings {
     );
   };
 
-  const onSetDefault = (model: ModelProfileSummary): void => {
+  const onSetDefault = (model: ModelProfileSummary, role: ModelRole): void => {
     reportAction(
-      window.betterwork.models.setDefault({ id: model.id }).then((result) => {
+      window.betterwork.models.setDefault({ id: model.id, role }).then((result) => {
         if (result.updated) {
-          showToast('success', `${model.name} 已设为${roleName[model.role]}默认模型。`);
+          showToast('success', `${model.name} 已设为${roleName[role]}默认模型。`);
         } else {
           showToast('error', '仅已启用模型可以设为默认。');
         }

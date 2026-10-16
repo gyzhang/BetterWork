@@ -8,7 +8,7 @@ export interface ConnectivityResult {
 export interface ModelConnectionTarget {
   baseUrl: string;
   model: string;
-  role: ModelRole;
+  roles: ModelRole[];
   apiKey: string;
 }
 
@@ -31,16 +31,26 @@ export function resolveEndpoint(baseUrl: string, role: ModelRole): string {
   }
   const normalizedPath = url.pathname.replace(/\/+$/, '');
   // 用户可能已经写全了端点，两种后缀都要认，否则会被再拼一次路径
-  if (normalizedPath.endsWith('/chat/completions') || normalizedPath.endsWith('/embeddings')) {
-    url.pathname = normalizedPath;
+  if (normalizedPath.endsWith('/chat/completions')) {
+    url.pathname =
+      role === 'embedding'
+        ? `${normalizedPath.slice(0, -'/chat/completions'.length)}/embeddings`
+        : normalizedPath;
+    return url.toString();
+  }
+  if (normalizedPath.endsWith('/embeddings')) {
+    url.pathname =
+      role === 'embedding'
+        ? normalizedPath
+        : `${normalizedPath.slice(0, -'/embeddings'.length)}/chat/completions`;
     return url.toString();
   }
   url.pathname = `${normalizedPath}/${role === 'embedding' ? 'embeddings' : 'chat/completions'}`;
   return url.toString();
 }
 
-const buildProbeBody = (target: ModelConnectionTarget): unknown =>
-  target.role === 'embedding'
+const buildProbeBody = (target: ModelConnectionTarget, role: ModelRole): unknown =>
+  role === 'embedding'
     ? { model: target.model, input: '算台连接测试' }
     : {
         model: target.model,
@@ -75,33 +85,60 @@ export async function probeModelConnection(
   target: ModelConnectionTarget,
   fetchImpl: typeof fetch = fetch,
 ): Promise<ConnectivityResult> {
-  let endpoint: string;
-  try {
-    endpoint = resolveEndpoint(target.baseUrl, target.role);
-  } catch (error) {
-    return { ok: false, message: error instanceof Error ? error.message : 'API 地址无效' };
+  const probeRoles: ModelRole[] = [];
+  if (target.roles.some((role) => role === 'language' || role === 'vision')) {
+    probeRoles.push('language');
   }
+  if (target.roles.includes('embedding')) probeRoles.push('embedding');
+  if (probeRoles.length === 0) return { ok: false, message: '请至少选择一个模型角色' };
 
-  try {
-    const response = await fetchImpl(endpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(target.apiKey ? { Authorization: `Bearer ${target.apiKey}` } : {}),
-      },
-      body: JSON.stringify(buildProbeBody(target)),
-      signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
-    });
-    if (!response.ok) return { ok: false, message: `连接失败（HTTP ${response.status}）` };
-    return { ok: true, message: successMessage(target.role) };
-  } catch (error) {
-    if (error instanceof Error && error.name === 'TimeoutError') {
-      return { ok: false, message: `连接超时（超过 ${PROBE_TIMEOUT_MS / 1000} 秒）` };
+  const results: ConnectivityResult[] = [];
+  const qualifyFailure = (role: ModelRole, message: string): string => {
+    if (probeRoles.length !== 2) return message;
+    return `${role === 'embedding' ? 'Embedding 接口' : '聊天接口'}：${message}`;
+  };
+  for (const role of probeRoles) {
+    let endpoint: string;
+    try {
+      endpoint = resolveEndpoint(target.baseUrl, role);
+    } catch (error) {
+      return { ok: false, message: error instanceof Error ? error.message : 'API 地址无效' };
     }
-    const detail = error instanceof Error ? error.message : '连接失败';
-    return {
-      ok: false,
-      message: `无法连接模型服务（${displayEndpoint(endpoint)}）：${detail}`,
-    };
+
+    try {
+      const response = await fetchImpl(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(target.apiKey ? { Authorization: `Bearer ${target.apiKey}` } : {}),
+        },
+        body: JSON.stringify(buildProbeBody(target, role)),
+        signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+      });
+      if (!response.ok) {
+        return {
+          ok: false,
+          message: qualifyFailure(role, `连接失败（HTTP ${response.status}）`),
+        };
+      }
+      results.push({ ok: true, message: successMessage(role) });
+    } catch (error) {
+      if (error instanceof Error && error.name === 'TimeoutError') {
+        return {
+          ok: false,
+          message: qualifyFailure(role, `连接超时（超过 ${PROBE_TIMEOUT_MS / 1000} 秒）`),
+        };
+      }
+      const detail = error instanceof Error ? error.message : '连接失败';
+      return {
+        ok: false,
+        message: qualifyFailure(
+          role,
+          `无法连接模型服务（${displayEndpoint(endpoint)}）：${detail}`,
+        ),
+      };
+    }
   }
+  if (probeRoles.length === 2) return { ok: true, message: '聊天与 Embedding 模型连接成功' };
+  return results[0] ?? { ok: false, message: '连接测试失败' };
 }

@@ -1,4 +1,8 @@
-import type { ManagedNodeRuntimeSummary, ModelProfileSummary } from '@betterwork/agent-protocol';
+import type {
+  ManagedNodeRuntimeSummary,
+  ModelProfileSummary,
+  ModelRole,
+} from '@betterwork/agent-protocol';
 import { DEFAULT_MAX_SKILL_TOOL_ROUNDS, MAX_SKILL_TOOL_ROUNDS } from '@betterwork/agent-protocol';
 import React from 'react';
 
@@ -45,14 +49,14 @@ export interface SettingsPageProps {
   tab: SettingsTab;
   setTab: (tab: SettingsTab) => void;
   models: ModelProfileSummary[];
-  modelFilter: ModelProfileSummary['role'] | 'all';
-  setModelFilter: (filter: ModelProfileSummary['role'] | 'all') => void;
+  modelFilter: ModelRole | 'all';
+  setModelFilter: (filter: ModelRole | 'all') => void;
   activeLanguageModel?: ModelProfileSummary | undefined;
-  defaultModelIds: Map<ModelProfileSummary['role'], string | undefined>;
+  defaultModelIds: Map<ModelRole, string | undefined>;
   onAdd: () => void;
   onEdit: (model: ModelProfileSummary) => void;
   onToggle: (model: ModelProfileSummary) => void;
-  onSetDefault: (model: ModelProfileSummary) => void;
+  onSetDefault: (model: ModelProfileSummary, role: ModelRole) => void;
   onDelete: (model: ModelProfileSummary) => void;
   appearance: AppearancePreference;
   resolvedAppearance: ResolvedAppearance;
@@ -425,12 +429,16 @@ function ModelSettings({
       <div className="model-list">
         {models.length === 0 ? (
           <EmptyNotice
-            title="尚未配置模型"
-            detail="添加一个 OpenAI-compatible 服务后，即可从教学链路切换到真实模型。"
+            title={modelFilter === 'all' ? '尚未配置模型' : `没有${roleName[modelFilter]}模型`}
+            detail={
+              modelFilter === 'all'
+                ? '添加一个 OpenAI-compatible 服务后，即可从教学链路切换到真实模型。'
+                : '添加模型并选择此角色后，会显示在这里。'
+            }
           />
         ) : (
           models.map((model) => {
-            const isDefault = defaultModelIds.get(model.role) === model.id;
+            const visibleRoles = modelFilter === 'all' ? model.roles : [modelFilter];
             return (
               <ListRow
                 key={model.id}
@@ -438,20 +446,28 @@ function ModelSettings({
                 tone={model.enabled ? 'default' : 'muted'}
                 leading={
                   <span className="model-role-icon" aria-hidden="true">
-                    {model.role === 'language' ? '文' : model.role === 'vision' ? '图' : '嵌'}
+                    {model.roles.length > 1
+                      ? '多'
+                      : model.roles[0] === 'language'
+                        ? '文'
+                        : model.roles[0] === 'vision'
+                          ? '图'
+                          : '嵌'}
                   </span>
                 }
                 title={
                   <>
                     {model.name}
-                    {isDefault && (
-                      <Badge tone="brand" shape="tag">
-                        {model.role === 'language' ? '当前工作模型' : '默认模型'}
-                      </Badge>
+                    {model.roles.map((role) =>
+                      defaultModelIds.get(role) === model.id ? (
+                        <Badge key={role} tone="brand" shape="tag">
+                          {role === 'language' ? '当前工作模型' : `${roleName[role]}默认`}
+                        </Badge>
+                      ) : null,
                     )}
                   </>
                 }
-                detail={`${roleName[model.role]} · ${model.provider} · ${model.model}`}
+                detail={`${model.roles.map((role) => roleName[role]).join('、')} · ${model.provider} · ${model.model}`}
                 meta={
                   <>
                     {model.apiKeyConfigured ? '已配置凭据' : '未配置凭据'} ·{' '}
@@ -467,15 +483,18 @@ function ModelSettings({
                     <Button variant="quiet" size="sm" type="button" onClick={() => onEdit(model)}>
                       编辑
                     </Button>
-                    {!isDefault && (
-                      <Button
-                        variant="quiet"
-                        size="sm"
-                        disabled={!model.enabled}
-                        onClick={() => onSetDefault(model)}
-                      >
-                        设为默认
-                      </Button>
+                    {visibleRoles.map((role) =>
+                      defaultModelIds.get(role) === model.id ? null : (
+                        <Button
+                          key={role}
+                          variant="quiet"
+                          size="sm"
+                          disabled={!model.enabled}
+                          onClick={() => onSetDefault(model, role)}
+                        >
+                          {modelFilter === 'all' ? `设为${roleName[role]}默认` : '设为默认'}
+                        </Button>
+                      ),
                     )}
                     <Switch label="启用" checked={model.enabled} onChange={() => onToggle(model)} />
                     <Button

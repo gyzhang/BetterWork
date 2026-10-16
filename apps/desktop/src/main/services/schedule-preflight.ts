@@ -104,7 +104,7 @@ const resolveLanguageModel = (
     const modelProfileId = revision.modelReference.modelProfileId;
     return models.find((model) => model.id === modelProfileId);
   }
-  return models.find((model) => model.role === 'language' && model.enabled);
+  return models.find((model) => model.roles.includes('language') && model.enabled);
 };
 
 const hasDeclarativeCommandContracts = (skill: SkillDetail): boolean =>
@@ -195,7 +195,7 @@ export class SchedulePreflightService {
     if (!model) {
       add('model-unavailable', '没有可用于后台执行的真实语言模型配置，请在设置中配置模型。');
     } else {
-      if (!model.enabled || model.role !== 'language') {
+      if (!model.enabled || !model.roles.includes('language')) {
         add('model-disabled', '指定的语言模型已停用或用途不匹配，请修复专家模型配置。', model.id);
       }
       if (!modelCredentialReady) {
@@ -277,7 +277,7 @@ export class SchedulePreflightService {
             provider: model.provider,
             baseUrl: model.baseUrl,
             model: model.model,
-            role: model.role,
+            roles: model.roles,
             enabled: model.enabled,
             apiKeyConfigured: model.apiKeyConfigured,
             credentialStatus: modelCredentialStatus,

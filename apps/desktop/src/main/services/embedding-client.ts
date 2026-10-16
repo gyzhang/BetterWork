@@ -388,7 +388,7 @@ export class EmbeddingClient {
   private identityOf(profileId: string): EmbeddingIdentity {
     const profile = this.models.getWithSecret(profileId);
     if (!profile) throw unavailable(`嵌入模型配置不存在：${profileId}`);
-    if (!profile.enabled || profile.role !== 'embedding') {
+    if (!profile.enabled || !profile.roles.includes('embedding')) {
       throw unavailable(`模型配置「${profile.name}」当前不可用于嵌入。`);
     }
     return {
