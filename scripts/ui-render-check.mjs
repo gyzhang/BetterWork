@@ -35,9 +35,12 @@ try {
     await rm(path.join(output, 'matrix-results.json'), { force: true });
   }
   const appOnly = probe.includes('--app-only');
+  const diagnosticsOnly = probe.includes('--diagnostics-only');
   const crashProbe = probe.includes('--probe-crash-recovery');
   const recoveryOnly = probe.includes('--recovery-only') || crashProbe;
   if (appOnly && recoveryOnly) throw new Error('应用与进程恢复定向选项不能混用');
+  if (diagnosticsOnly && (appOnly || recoveryOnly))
+    throw new Error('执行诊断页面与应用/进程恢复定向选项不能混用');
   if (
     probe.some(
       (argument) =>
@@ -50,6 +53,7 @@ try {
           '--app-only',
           '--schedule-only',
           '--mcp-only',
+          '--diagnostics-only',
           '--recovery-only',
           '--probe-crash-recovery',
           '--probe-keyboard',
@@ -233,6 +237,7 @@ try {
               '--app-only',
               '--schedule-only',
               '--mcp-only',
+              '--diagnostics-only',
             ].includes(argument),
           ),
         ],
@@ -268,10 +273,13 @@ try {
       const results = recoveryOnly
         ? []
         : JSON.parse(await readFile(path.join(output, 'matrix-results.json'), 'utf8'));
-      const scheduleOnly = probe.includes('--schedule-only') || probe.includes('--mcp-only');
+      const pageOnly =
+        probe.includes('--schedule-only') ||
+        probe.includes('--mcp-only') ||
+        probe.includes('--diagnostics-only');
       if (
         !appOnly &&
-        !scheduleOnly &&
+        !pageOnly &&
         !probe.some((argument) => argument.startsWith('--probe-') && !crashProbe)
       ) {
         await mkdir(path.join(output, 'screenshots'), { recursive: true });
@@ -290,23 +298,25 @@ try {
       if (!Array.isArray(results) || results.length === 0) throw new Error('UI 渲染矩阵缺完成证据');
       if (
         (!recoveryOnly &&
-          !scheduleOnly &&
+          !pageOnly &&
           !results.some(
             (item) => item.coverage === 'production-app-with-real-ipc-and-temporary-sqlite',
           )) ||
         (!appOnly &&
-          !scheduleOnly &&
+          !pageOnly &&
           !results.some(
             (item) => item.coverage === 'production-process-recovery-with-temporary-sqlite',
           )) ||
         (!appOnly &&
           !recoveryOnly &&
           !(
-            scheduleOnly
+            pageOnly
               ? probe.includes('--mcp-only')
                 ? ['mcp']
-                : ['schedule']
-              : ['artifact', 'knowledge', 'expert', 'memory', 'schedule']
+                : probe.includes('--diagnostics-only')
+                  ? ['diagnostics']
+                  : ['schedule']
+              : ['artifact', 'knowledge', 'expert', 'memory', 'schedule', 'diagnostics']
           ).every((page) => results.some((item) => item.page === page && item.checks?.length > 0)))
       )
         throw new Error('UI 渲染矩阵缺页面或应用旅程证据');

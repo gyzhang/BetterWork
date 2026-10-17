@@ -16,6 +16,29 @@ export async function runRecoveryJourney(step: string): Promise<void> {
     await click('设置');
     await click('记忆');
     await waitFor(() => hasText(method) && hasText('取消优先带入'));
+    await click('工作');
+    const findCompletedTask = (): HTMLButtonElement | undefined =>
+      [...document.querySelectorAll<HTMLButtonElement>('.workspace-group-tasks button')].find(
+        (item) => item.textContent?.includes('生成 Markdown 本期复盘，核对选定资料。'),
+      );
+    await waitFor(() => Boolean(findCompletedTask()));
+    const completedTask = findCompletedTask();
+    if (!completedTask) throw new Error('重开后缺少待回看的本期 Task');
+    completedTask.click();
+    await waitFor(() => hasText('本期复盘已完成'));
+    await click('查看上下文');
+    await click('过程');
+    await click('查看当前 Run 的执行详情');
+    await waitFor(
+      () =>
+        hasText('第 1 轮') &&
+        hasText('Run · 准备') &&
+        hasText('Run · 审计') &&
+        hasText('Run · 成果提交'),
+    );
+    const details = document.querySelector<HTMLElement>('.run-execution-details');
+    if (!details?.textContent?.includes('已完成'))
+      throw new Error('重开后的诊断详情没有恢复 Run 终态');
   }
   if (step === 'process-history' || step === 'acceptance-history') {
     await click('工作');

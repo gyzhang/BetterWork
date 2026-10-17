@@ -49,7 +49,7 @@
 | AT20 | 本地脱敏 JSON 诊断包 | AT19 | M3 | done | `schemaVersion: 1` 严格白名单包；Main 在同一 AppStore 事务验证范围并取 Run、完整诊断投影、来源与问题标记；UTF-8 5 MiB 超限拒绝、保存对话框取消静默、权限 0600、写失败可重试，结果不回传路径。协议最小用例先红后绿；服务/IPC/Preload/详情页覆盖密钥、prompt、reasoning、嵌套工具输出、路径脱敏、错误范围与来源完整性降级。定向跨层 5 文件/495 项通过；最终 check:quick 退出 0（docs 156、functional 198 文件/3203 项、动态消费者 1/221、heavy 6/215；覆盖 115/138=83.33%）。迁移仍 v50；未连接远端、未调用模型，真实 Electron UI 留 AT23，详见 2026-10-17 日志 |
 | AT21 | 固定合成样本与版本比较 | AT20 | M4 | done | 9 类固定事件样本逐场景新建内存 SQLite/Run；比较输入/配置修订、Run ID、期望与生产仓储观测，9/9 匹配，业务质量明确未验。比较器反例红 1 项失败、修复后定向绿 2 项；`check:quick -- --base 44709041` 退出 0（lint、format、typecheck、docs 156、functional 1 文件/2 项、heavy 无差异用例）；无迁移。详见 [AT21 离线样本报告](execution-tracing-quality-sample-v1.md) 与 2026-10-17 日志 |
 | AT22 | 离线总收口与人工验收清单 | AT21 | M4 | done | 核对 AT01–AT21 提交、当前分支/HEAD、v50 与 Main 生产装配；帮助 §8.3 补当前/历史入口和筛选、标记、导出说明。离线回归：11 文件/540 项、RunService/SQLite 跨层 1 项、App 回答保存 2 项均通过；`check:quick -- --base 2e57b337` 退出 0（本卡仅文档差异，docs 156）。人工清单已写入但待人执行；UI、真实模型、安装、性能未验；详见日志 |
-| AT23 | 真实 UI 专项与人工走查 | AT22 | 独立 | todo | 待用户单独安排，未计入 AT01–AT22 |
+| AT23 | 真实 UI 专项与人工走查 | AT22 | 独立 | doing | 用户已安排本轮继续 AT11–AT25；`--diagnostics-only` 覆盖青玉明/暗 × 760/1380 × 普通/减动效 8 组，验证实时宿主阶段、长双语载荷无横向溢出、问题标记失败保留后重试、导出取消、工作空间筛选、失败/停止 Run 回看、Tab/Esc 焦点归还及 reasoning 不显示；专项 8 组、全量 `ui:check` 82 组和 app-only 1 组通过，真实 App/Preload/IPC/临时 SQLite 重开旅程 17 步与进程恢复通过。`check:quick -- --base 18daa331` 退出 0（lint、format、typecheck、docs 156；无匹配 Vitest 用例，页面行为由独立 UI 门禁覆盖）。AI 截图走查读数正文最小 12px、无横向溢出，未发现页面缺陷；截图在 `/tmp/betterwork-at23-fullui.Eg4foa` 与 `/tmp/betterwork-at23-appfinal.n0Rb7s`。实际人工验收仍待填写，不代签 |
 | AT24 | 真实模型语义与业务验收 | AT22 | 独立 | todo | 待模型配置/预算授权，未计入离线目标 |
 | AT25 | 固定版本 OTel/OTLP 出口 | AT22 | 可选 | todo | 尚未授权扩展；不是本地主链路前置 |
 
