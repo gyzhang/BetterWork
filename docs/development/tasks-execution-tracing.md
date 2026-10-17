@@ -47,7 +47,7 @@
 | AT18 | 执行记录筛选与统计呈现 | AT17 | M3 | done | 详情内接入任务/Workspace、日期、固定修订与模型指纹筛选；统计覆盖全部匹配 Run、显示失败分母、完整性、token 已知/未知调用、耗时样本与排除数；迟到筛选响应丢弃，可分页并返回具体 Run。定向 React 15 项通过；关闭请求世代校验的变异测试红 1、恢复后绿；check:quick 退出 0（docs 156、functional 2 文件/48 项、heavy App 56 项；差异覆盖 102/114=89.47%）；无迁移，v49，真实 UI 留 AT23，详见 2026-10-17 日志 |
 | AT19 | 用户问题标记 | AT18 | M3 | done | v50 追加每 Run 单标记表，CAS revision 防并发覆盖并随 Run 级联删除；Main 验证 Workspace/Task/Run 归属，节点必须属于该 Run。协议/IPC/Preload/Hook/执行链分类与节点选择已接通；保存失败保留草稿，成功/清除各只有一枚局部 TransientToast。跨层定向 6 文件/560 项通过；check:quick 退出 0（docs 156、functional 197/3195、动态消费者 2/285、heavy 6/215；覆盖 119/124=95.97%）。修复协议测试既有嵌套用例收集错误；不含自由文本/Memory，真实 Electron UI 留 AT23，详见 2026-10-17 日志 |
 | AT20 | 本地脱敏 JSON 诊断包 | AT19 | M3 | done | `schemaVersion: 1` 严格白名单包；Main 在同一 AppStore 事务验证范围并取 Run、完整诊断投影、来源与问题标记；UTF-8 5 MiB 超限拒绝、保存对话框取消静默、权限 0600、写失败可重试，结果不回传路径。协议最小用例先红后绿；服务/IPC/Preload/详情页覆盖密钥、prompt、reasoning、嵌套工具输出、路径脱敏、错误范围与来源完整性降级。定向跨层 5 文件/495 项通过；最终 check:quick 退出 0（docs 156、functional 198 文件/3203 项、动态消费者 1/221、heavy 6/215；覆盖 115/138=83.33%）。迁移仍 v50；未连接远端、未调用模型，真实 Electron UI 留 AT23，详见 2026-10-17 日志 |
-| AT21 | 固定合成样本与版本比较 | AT20 | M4 | todo | 未开工；不新增付费重跑产品 |
+| AT21 | 固定合成样本与版本比较 | AT20 | M4 | done | 9 类固定事件样本逐场景新建内存 SQLite/Run；比较输入/配置修订、Run ID、期望与生产仓储观测，9/9 匹配，业务质量明确未验。比较器反例红 1 项失败、修复后定向绿 2 项；`check:quick -- --base 44709041` 退出 0（lint、format、typecheck、docs 156、functional 1 文件/2 项、heavy 无差异用例）；无迁移。详见 [AT21 离线样本报告](execution-tracing-quality-sample-v1.md) 与 2026-10-17 日志 |
 | AT22 | 离线总收口与人工验收清单 | AT21 | M4 | todo | 未开工 |
 | AT23 | 真实 UI 专项与人工走查 | AT22 | 独立 | todo | 待用户单独安排，未计入 AT01–AT22 |
 | AT24 | 真实模型语义与业务验收 | AT22 | 独立 | todo | 待模型配置/预算授权，未计入离线目标 |
