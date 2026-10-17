@@ -14,7 +14,7 @@ import type {
   ScheduleConfigDraft,
   ScheduleSourceItem,
 } from '@betterwork/agent-protocol';
-import { countCodePoints, IpcChannel } from '@betterwork/agent-protocol';
+import { agentRuntimeEventSchema, countCodePoints, IpcChannel } from '@betterwork/agent-protocol';
 import type { ArtifactRegisterInput, WebFetch } from '@betterwork/tool-runtime';
 import type Database from 'better-sqlite3';
 import type { BrowserWindow } from 'electron';
@@ -5673,6 +5673,40 @@ describe('AT10 离线跨层执行追踪', () => {
       });
       expect(fixture.store.runs.failInterruptedRuns('合成旧 Run 中断', Date.now())).toBe(1);
 
+      const interruptedHostRunId = 'at16-interrupted-host-run';
+      fixture.store.runs.create(
+        {
+          id: interruptedHostRunId,
+          taskId: fixture.taskId,
+          sessionId: fixture.sessionId,
+          prompt: '合成重启时未闭合的宿主阶段',
+          status: 'running',
+          createdAt: Date.now() - 2_000,
+        },
+        { version: 2, sections: ['core', 'host'] },
+      );
+      fixture.store.runs.appendEvent(
+        agentRuntimeEventSchema.parse({
+          id: 'at16-interrupted-host-run-started',
+          runId: interruptedHostRunId,
+          sequence: 0,
+          createdAt: Date.now() - 2_000,
+          type: 'run.started',
+          taskId: fixture.taskId,
+          sessionId: fixture.sessionId,
+        }),
+      );
+      fixture.store.runHostDiagnostics.append({
+        id: 'at16-interrupted-host-operation-started',
+        runId: interruptedHostRunId,
+        operationId: 'at16-interrupted-host-operation',
+        kind: 'run-host',
+        phase: 'skill-cleanup',
+        state: 'started',
+        createdAt: Date.now() - 1_900,
+      });
+      const providerCallsBeforeRecovery = providerSpy.mock.calls.length;
+
       const existingArtifactVersion = fixture.store.artifacts.listVersions(existingArtifact.id)[0];
       if (!existingArtifactVersion) throw new Error('existing artifact version missing');
       expect(fixture.store.artifacts.getVersionDetail(existingArtifactVersion.id)).toMatchObject({
@@ -5691,6 +5725,29 @@ describe('AT10 离线跨层执行追踪', () => {
       previousStore.close();
       fixture.store = AppStore.open(fixture.databasePath);
       openStores.push(fixture.store);
+
+      expect(fixture.store.runs.failInterruptedRuns('AT16 合成启动恢复', Date.now())).toBe(1);
+      expect(fixture.store.runs.failInterruptedRuns('不得重复收口', Date.now())).toBe(0);
+      expect(providerSpy).toHaveBeenCalledTimes(providerCallsBeforeRecovery);
+      expect(
+        fixture.store.runs.listEvents(interruptedHostRunId).map((event) => event.type),
+      ).toEqual(['run.started', 'run.failed']);
+      const recoveredPage = fixture.store.runDiagnostics.getPage({ runId: interruptedHostRunId });
+      expect(recoveredPage).toMatchObject({
+        integrity: 'partial',
+        summary: { status: 'failed' },
+      });
+      const recoveredHostNode = recoveredPage?.nodes.find(
+        (node) => node.id === 'host:at16-interrupted-host-operation',
+      );
+      expect(recoveredHostNode).toMatchObject({
+        kind: 'host',
+        status: 'interrupted',
+        evidenceState: 'recorded',
+        sourceSequenceStart: 0,
+      });
+      expect(recoveredHostNode).not.toHaveProperty('endedAt');
+      expect(recoveredHostNode).not.toHaveProperty('durationMs');
 
       const completedPage = fixture.store.runDiagnostics.getPage({
         runId: completedRunId,

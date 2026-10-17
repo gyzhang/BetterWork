@@ -42,7 +42,7 @@
 | AT13 | Skill 宿主阶段与执行关联 | AT12 | M2 | done | 本地 `codex/at11-at25`；dispatch/execute/validate/publish/cleanup 关联真实 executionId/toolCallId，输出只记录受控字节数、截断标志和结果元数据。派发最小反例红 1→恢复后绿 1；Skill/协议定向 77 项、RunService 桥接 heavy 5 项通过；最终 check:quick 退出 0（functional 195/3165、动态消费者 280、heavy 6 文件/215；覆盖 249/279=89.25%）；迁移 v49，真实 PPT/UI/模型未验，ADR-0050 保持 Proposed，详见 2026-10-17 日志 |
 | AT14 | 精确工作依据联查 | AT13 | M2 | done | 固定 Run 修订、材料实际读取、记忆/连续上下文与成果输入关系按精确 ID 联查；严格 DTO/同 Workspace IPC/Preload/Hook/详情来源页；配置变更和最新版本不漂移，搜索不算正文读取，跨范围引用拒绝，响应不含正文/路径/fileKey/locator/endpoint。Schema 与读取判定反例红→绿；定向 6 文件/486 项、typecheck 通过；最终 check:quick 退出 0（docs 156、functional 196/3174、动态消费者 2/281、heavy 6/215；差异覆盖 359/447=80.31%）；迁移仍 v49，真实 UI/模型未验，详见 2026-10-17 日志 |
 | AT15 | 双来源执行树与时间轴 | AT14 | M2 | done | Core/Host 保留各自原序号，按显式关联建树、稳定复合游标分页并合并最小诊断失效推送；运行详情提供键盘可读时间轴与文本替代。修复 ContextPanel 假 API 缺失订阅方法；8 个定向文件/530 项、ContextPanel 33 项通过；最终 check:quick 退出 0（functional 198/3341、动态消费者 2/281、heavy 6/215；差异覆盖 537/631=85.10%）；无新迁移，仍 v49；真实 UI/模型未验，详见 2026-10-17 日志 |
-| AT16 | 观测故障、中断与恢复回归 | AT15 | M2 | todo | 未开工；只用隔离宿主 |
+| AT16 | 观测故障、中断与恢复回归 | AT15 | M2 | done | 补测验证 Recorder 写入失败不改变成功/取消终态、业务 Journal 拒绝事件不派发且失败只收口一次；临时文件 SQLite 重开后启动恢复仅追加一个根失败终态，未闭合 Host 节点为 interrupted 且无结束时间/耗时，不触发 Provider 重跑。定向 lifecycle 35 项、RunService AT10 恢复 1 项及完整 check:quick 通过（functional 198/3342、动态消费者 2/281、heavy 6/215；差异覆盖 537/631=85.10%）；无新迁移，仍 v49；未强杀进程/操作用户库/验真实 UI 或模型，详见 2026-10-17 日志 |
 | AT17 | 统计筛选与确定性聚合 | AT16 | M3 | todo | 未开工 |
 | AT18 | 执行记录筛选与统计呈现 | AT17 | M3 | todo | 未开工 |
 | AT19 | 用户问题标记 | AT18 | M3 | todo | 未开工 |

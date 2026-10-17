@@ -6,7 +6,8 @@ import {
   agentRuntimeEventSchema,
   runDiagnosticsChangedEventSchema,
 } from '@betterwork/agent-protocol';
-import { afterEach, describe, expect, it } from 'vitest';
+import type Database from 'better-sqlite3';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { AppStore } from '../persistence';
 import { isRunTerminalEvent, RunEventLifecycle } from './run-event-lifecycle';
@@ -34,6 +35,7 @@ type CompletionHooks = Parameters<RunEventLifecycle['consume']>[2];
 const setup = (
   ports: Partial<Omit<LifecyclePorts, 'journal' | 'dispatch'>> = {},
   onDispatch?: (event: AgentRuntimeEvent) => void,
+  diagnosticsEnabled = true,
 ) => {
   const store = AppStore.open(':memory:');
   stores.push(store);
@@ -59,7 +61,9 @@ const setup = (
   const dispatched: AgentRuntimeEvent[] = [];
   const lifecycle = new RunEventLifecycle({
     ...ports,
-    ...(ports.runHostDiagnosticRecorder === undefined ? { runHostDiagnosticRecorder } : {}),
+    ...(diagnosticsEnabled && ports.runHostDiagnosticRecorder === undefined
+      ? { runHostDiagnosticRecorder }
+      : {}),
     journal: store.runs,
     dispatch: (event) => {
       expect(store.runs.listEvents(runId)).toContainEqual(event);
@@ -608,5 +612,99 @@ describe('Lifecycle robustness regressions', () => {
     ]);
     expect(fixture.store.runs.get(fixture.runId)?.status).toBe('completed');
     expect(fixture.store.artifacts.list()).toHaveLength(1);
+  });
+
+  it('keeps a successful Run and artifact when host diagnostic writes fail', async () => {
+    const fixture = setup({
+      finishSkills: async () => ({ cleanupFailed: 0 }),
+      releaseMcp: async () => {},
+    });
+    const db = (fixture.store as unknown as { db: Database.Database }).db;
+    db.exec(`CREATE TRIGGER fail_run_diagnostic_insert BEFORE INSERT ON run_diagnostic_events
+      BEGIN SELECT RAISE(FAIL, 'diagnostic store unavailable'); END`);
+    const observerLog = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    try {
+      await fixture.execute(stream([fixture.started, fixture.completed]));
+      expect(observerLog).toHaveBeenCalled();
+      expect(JSON.stringify(observerLog.mock.calls)).not.toContain('diagnostic store unavailable');
+    } finally {
+      observerLog.mockRestore();
+    }
+
+    expect(fixture.store.runs.get(fixture.runId)?.status).toBe('completed');
+    expect(fixture.store.artifacts.list()).toHaveLength(1);
+    expect(fixture.store.runHostDiagnostics.listByRun(fixture.runId)).toEqual([]);
+  });
+
+  it('preserves one cancelled terminal when host diagnostic writes fail during cleanup', async () => {
+    const fixture = setup({
+      finishSkills: async () => ({ cleanupFailed: 0 }),
+      releaseMcp: async () => {},
+    });
+    const db = (fixture.store as unknown as { db: Database.Database }).db;
+    db.exec(`CREATE TRIGGER fail_run_diagnostic_insert BEFORE INSERT ON run_diagnostic_events
+      BEGIN SELECT RAISE(FAIL, 'diagnostic store unavailable'); END`);
+    const observerLog = vi.spyOn(console, 'error').mockImplementation(() => {});
+    fixture.controller.abort('user cancelled');
+
+    try {
+      await fixture.execute(stream([fixture.started, fixture.completed]));
+      expect(observerLog).toHaveBeenCalled();
+      expect(JSON.stringify(observerLog.mock.calls)).not.toContain('diagnostic store unavailable');
+    } finally {
+      observerLog.mockRestore();
+    }
+
+    expect(fixture.store.runs.get(fixture.runId)?.status).toBe('cancelled');
+    expect(types(fixture.store.runs.listEvents(fixture.runId))).toEqual([
+      'run.started',
+      'run.cancelled',
+    ]);
+    expect(fixture.dispatched).toHaveLength(2);
+    expect(fixture.store.artifacts.list()).toEqual([]);
+    expect(fixture.store.runHostDiagnostics.listByRun(fixture.runId)).toEqual([]);
+  });
+
+  it('keeps the same terminal and artifact when host observation is disabled', async () => {
+    const calls: string[] = [];
+    const fixture = setup(
+      {
+        finishSkills: async () => {
+          calls.push('skill-cleanup');
+          return { cleanupFailed: 0 };
+        },
+        releaseMcp: async () => {
+          calls.push('mcp-cleanup');
+        },
+      },
+      undefined,
+      false,
+    );
+
+    await fixture.execute(stream([fixture.started, fixture.completed]), {
+      auditFinalContent: () => calls.push('audit'),
+      beginCommit: () => calls.push('begin-commit'),
+      saveMarkdownArtifact: async (content) => {
+        calls.push('artifact');
+        await fixture.hooks.saveMarkdownArtifact(content);
+      },
+      afterCompleted: async () => {
+        calls.push('after-completed');
+      },
+    });
+
+    expect(calls).toEqual([
+      'audit',
+      'skill-cleanup',
+      'mcp-cleanup',
+      'begin-commit',
+      'artifact',
+      'after-completed',
+    ]);
+    expect(fixture.store.runs.get(fixture.runId)?.status).toBe('completed');
+    expect(fixture.store.artifacts.list()).toHaveLength(1);
+    expect(fixture.store.runHostDiagnostics.listByRun(fixture.runId)).toEqual([]);
+    expect(types(fixture.dispatched)).toEqual(['run.started', 'run.completed']);
   });
 });
