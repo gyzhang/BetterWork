@@ -7,6 +7,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import type { ProcessSupervisor, SupervisorHandle } from '../infrastructure/process-supervisor';
 import { AppStore } from '../persistence';
+import type { ExecutionOutputService } from './execution-output-service';
+import { RunHostDiagnosticRecorder } from './run-host-diagnostic-recorder';
 import { computeDependencyFingerprint } from './skill-dependency-service';
 import { SkillExecutionService, type StartExecutionInput } from './skill-execution-service';
 
@@ -32,6 +34,7 @@ interface FakeJob {
 class FakeSupervisor implements ProcessSupervisor {
   readonly jobs: FakeJob[] = [];
   cleanupCompleted = true;
+  outputTruncated = false;
   launchError: Error | undefined;
 
   async launch(spec: JobSpec): Promise<SupervisorHandle> {
@@ -49,8 +52,8 @@ class FakeSupervisor implements ProcessSupervisor {
       capture: () => ({
         stdout: '',
         stderr: '',
-        truncated: false,
-        receivedBytes: 0,
+        truncated: this.outputTruncated,
+        receivedBytes: this.outputTruncated ? 32_769 : 0,
         droppedBytes: 0,
       }),
       cancel: async () => {
@@ -76,16 +79,43 @@ const openFixture = (): {
   return { store, supervisor, service: new SkillExecutionService(store, supervisor) };
 };
 
-const seedRun = (store: AppStore, runId: string): void => {
+const openInstrumentedFixture = (outputs?: ExecutionOutputService) => {
+  const store = AppStore.open(path.join(temporaryDirectory(), 'app-instrumented.sqlite'));
+  const supervisor = new FakeSupervisor();
+  const diagnostics = new RunHostDiagnosticRecorder(store.runHostDiagnostics);
+  return {
+    store,
+    supervisor,
+    diagnostics,
+    service: new SkillExecutionService(store, supervisor, outputs, diagnostics),
+  };
+};
+
+const seedRun = (store: AppStore, runId: string, hostDiagnostics = false): void => {
   const workspace = store.workspaces.getOrCreate('/tmp/fixture-workspace', '夹具工作区');
   const created = store.tasks.create(workspace.id, '制作演示', '生成 deck');
-  store.runs.create({
-    id: runId,
-    taskId: created.task.id,
-    sessionId: created.sessionId,
-    prompt: '生成 deck',
-    status: 'running',
+  store.runs.create(
+    {
+      id: runId,
+      taskId: created.task.id,
+      sessionId: created.sessionId,
+      prompt: '生成 deck',
+      status: 'running',
+      createdAt: Date.now(),
+    },
+    hostDiagnostics ? { version: 2, sections: ['core', 'host'] } : undefined,
+  );
+};
+
+const seedToolCall = (store: AppStore, runId: string, toolCallId: string): void => {
+  const events = store.runs.listEvents(runId);
+  store.runs.appendEvent({
+    id: `tool-started-${toolCallId}`,
+    runId,
+    sequence: (events.at(-1)?.sequence ?? -1) + 1,
     createdAt: Date.now(),
+    type: 'tool.started',
+    toolCall: { id: toolCallId, name: 'skill_execute', input: {} },
   });
 };
 
@@ -470,4 +500,168 @@ it('blocks a revoked binding immediately before launching a process', async () =
   );
   expect(supervisor.jobs).toHaveLength(0);
   store.close();
+});
+
+describe('Skill host diagnostic observations', () => {
+  it('links dispatch, execution, and validation to the original ToolCall and retains report/truncation facts', async () => {
+    const output = {
+      outputId: 'output-1',
+      relativePath: '.outputs/execution-1/output.bin',
+      fileHash: 'a'.repeat(64),
+      fileSize: 128,
+      reportHash: 'b'.repeat(64),
+      validation: { structure: 'passed', visual: 'not-checked', manualEdit: 'not-checked' },
+      mimeType: 'application/octet-stream',
+    };
+    const outputs = {
+      prepare: () => {},
+      collect: () => [output],
+      discard: () => {},
+    } as unknown as ExecutionOutputService;
+    const { store, supervisor, diagnostics, service } = openInstrumentedFixture(outputs);
+    seedRun(store, 'diagnostic-run', true);
+    seedSkill(store, 'diagnostic-skill', true);
+    const binding = service.createBinding({ runId: 'diagnostic-run', skillId: 'diagnostic-skill' });
+    seedToolCall(store, 'diagnostic-run', 'diagnostic-tool');
+    const dispatch = diagnostics.beginOperation({
+      kind: 'skill-host',
+      phase: 'dispatch',
+      runId: 'diagnostic-run',
+      toolCallId: 'diagnostic-tool',
+      errorCode: 'dispatch-failed',
+    });
+    const execution = await service.startExecution({
+      ...startInput('diagnostic-run', binding.id, 'diagnostic-tool'),
+      ...(dispatch.recorded ? { parentOperationId: dispatch.operationId } : {}),
+    });
+    dispatch.finish({ state: 'completed', metadata: { result: 'success' } });
+    supervisor.outputTruncated = true;
+    supervisor.jobs[0]?.resolveResult({
+      kind: 'succeeded',
+      exitCode: 0,
+      outputIds: ['output-1'],
+      reportHash: 'b'.repeat(64),
+      durationMs: 12,
+    });
+
+    const awaited = await service.awaitExecution(execution.id);
+    const events = store.runHostDiagnostics.listByRun('diagnostic-run');
+    const executionEvent = events.find(
+      (event) => event.phase === 'execute' && event.state !== 'started',
+    );
+    const validationEvent = events.find(
+      (event) => event.phase === 'validate' && event.state !== 'started',
+    );
+
+    expect(awaited.outputTruncated).toBe(true);
+    expect(awaited.execution).toMatchObject({
+      status: 'succeeded',
+      reportHash: 'b'.repeat(64),
+      outputIds: ['output-1'],
+    });
+    expect(executionEvent).toMatchObject({
+      kind: 'skill-host',
+      phase: 'execute',
+      state: 'completed',
+      runId: 'diagnostic-run',
+      toolCallId: 'diagnostic-tool',
+      executionId: execution.id,
+      parentOperationId: dispatch.operationId,
+      metadata: { outputTruncated: true, outputBytes: 32_769 },
+    });
+    expect(validationEvent).toMatchObject({
+      kind: 'skill-host',
+      phase: 'validate',
+      state: 'completed',
+      toolCallId: 'diagnostic-tool',
+      executionId: execution.id,
+      ...(executionEvent ? { parentOperationId: executionEvent.operationId } : {}),
+      metadata: { outputTruncated: true, outputBytes: 128, result: 'success' },
+    });
+    store.close();
+  });
+
+  it('records output verification rejection without copying its error text or changing failure reasons', async () => {
+    const outputs = {
+      prepare: () => {},
+      collect: () => {
+        throw new Error('private output detail');
+      },
+      discard: () => {},
+    } as unknown as ExecutionOutputService;
+    const { store, supervisor, service } = openInstrumentedFixture(outputs);
+    seedRun(store, 'validation-run', true);
+    seedSkill(store, 'validation-skill', true);
+    const binding = service.createBinding({ runId: 'validation-run', skillId: 'validation-skill' });
+    seedToolCall(store, 'validation-run', 'validation-tool');
+    const execution = await service.startExecution(
+      startInput('validation-run', binding.id, 'validation-tool'),
+    );
+    supervisor.jobs[0]?.resolveResult({
+      kind: 'succeeded',
+      exitCode: 0,
+      outputIds: ['unverified-output'],
+      durationMs: 1,
+    });
+
+    const awaited = await service.awaitExecution(execution.id);
+    const events = store.runHostDiagnostics.listByRun('validation-run');
+    const validation = events.find(
+      (event) => event.phase === 'validate' && event.state !== 'started',
+    );
+
+    expect(awaited.execution).toMatchObject({ status: 'failed', reason: 'validate-failed' });
+    expect(validation).toMatchObject({
+      phase: 'validate',
+      state: 'failed',
+      errorCode: 'validate-failed',
+      metadata: { result: 'rejected', outputTruncated: false },
+    });
+    expect(JSON.stringify(validation)).not.toContain('private output detail');
+    store.close();
+  });
+
+  it('records cleanup failure and ignores late supervisor results after cancellation', async () => {
+    const { store, supervisor, service } = openInstrumentedFixture();
+    seedRun(store, 'cleanup-run', true);
+    seedSkill(store, 'cleanup-skill', true);
+    const binding = service.createBinding({ runId: 'cleanup-run', skillId: 'cleanup-skill' });
+    seedToolCall(store, 'cleanup-run', 'cleanup-tool');
+    const execution = await service.startExecution(
+      startInput('cleanup-run', binding.id, 'cleanup-tool'),
+    );
+    supervisor.cleanupCompleted = false;
+
+    const report = await service.cancelExecution(execution.id, 'cancelled-by-trust-revoke');
+    const awaited = await service.awaitExecution(execution.id);
+    supervisor.jobs[0]?.resolveResult({
+      kind: 'succeeded',
+      exitCode: 0,
+      outputIds: ['late-output'],
+      durationMs: 1,
+    });
+
+    const events = store.runHostDiagnostics.listByRun('cleanup-run');
+    expect(report).toEqual({ applied: true, cleanupCompleted: false });
+    expect(awaited.execution).toMatchObject({ status: 'failed', reason: 'cleanup-failed' });
+    expect(events.filter((event) => event.state !== 'started')).toMatchObject([
+      expect.objectContaining({ phase: 'execute', state: 'failed', errorCode: 'cleanup-failed' }),
+      expect.objectContaining({ phase: 'cleanup', state: 'failed', errorCode: 'cleanup-failed' }),
+    ]);
+    expect(
+      service.recordResult(execution.id, {
+        kind: 'failed',
+        phase: 'execute',
+        code: 'late',
+        summary: 'late result',
+        retryable: false,
+      }),
+    ).toBe(false);
+    expect(store.executions.getExecution(execution.id)).toMatchObject({
+      status: 'failed',
+      reason: 'cleanup-failed',
+      outputIds: [],
+    });
+    store.close();
+  });
 });

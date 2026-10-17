@@ -551,6 +551,7 @@ function bootstrap(initiallySuspended: boolean): ApplicationContext {
     store,
     supervisor,
     new ExecutionOutputService(),
+    runHostDiagnosticRecorder,
   );
   const interruptedExecutions = skillExecutionService.recoverInterruptedExecutions();
   if (interruptedExecutions > 0) {

@@ -59,6 +59,8 @@ HostDiagnosticEvent 最小字段：id、runId、operationId、diagnosticSequence
 - state：`started / completed / failed / cancelled / interrupted`，每个 operationId 至多开始一次、收口一次；结束前必须存在同 Run 的开始，重复相同收口幂等、冲突收口拒绝。
 - Run phase：`prepare / audit / skill-cleanup / mcp-cleanup / artifact-commit`。
 - Skill phase：`dispatch / execute / validate / publish / cleanup`。只有代码中确实能观测到的边界才细分；未埋点的 Python/CLI 内部显示“内部过程未记录”，不得按总耗时平分。
+- Skill 关联沿用真实 `ScriptExecution.id` 与发起命令的 `toolCallId`：`dispatch` 覆盖 RunService 对绑定/命令/环境的解析以及 Supervisor 启动，启动失败沿用 `spawn-failed` 并记录为 dispatch 失败；`execute` 覆盖 Supervisor 结果收口；存在输出验证器时，`validate` 覆盖 `VerifiedExecutionOutput` 收集和持久化；文件成果登记时，`publish` 覆盖现有 `FileArtifactService.register`；`cleanup` 覆盖执行取消和有界清理。阶段记录只标明宿主观察到的区间，不推断子进程内部子阶段。
+- 输出诊断元数据仅允许受控结果、退出码、输出字节数与 `outputTruncated` 布尔值。完整 `reportHash` 和 `outputIds` 继续留在既有 ScriptExecution/VerifiedExecutionOutput 业务记录中，由 executionId 联查；不得复制 stdout/stderr、报告正文或文件路径，也不把这些诊断元数据注入后续模型消息。
 - 同一 phase 可发生多次，必须使用不同 operationId；禁止以 phase 名称作为唯一身份。跨 Run 的 parent/tool/execution 关系拒绝。
 
 准备只覆盖已持久创建 Run 后发生的装配区间；创建 Run 事务之前的选择校验不补造成可回看 Run。recordingVersion/已启用诊断部分在新 Run 创建事务中固定，用于区分旧记录和应该存在但缺失的事实，不能由“没有失败事件”推导诊断完整。

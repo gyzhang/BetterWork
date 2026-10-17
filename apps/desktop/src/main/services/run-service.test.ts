@@ -15,7 +15,7 @@ import type {
   ScheduleSourceItem,
 } from '@betterwork/agent-protocol';
 import { countCodePoints, IpcChannel } from '@betterwork/agent-protocol';
-import type { WebFetch } from '@betterwork/tool-runtime';
+import type { ArtifactRegisterInput, WebFetch } from '@betterwork/tool-runtime';
 import type Database from 'better-sqlite3';
 import type { BrowserWindow } from 'electron';
 import ExcelJS from 'exceljs';
@@ -301,6 +301,7 @@ const createPreparedScheduleDraft = (fixture: Fixture) => {
 interface ServiceOptions {
   window?: WindowStub;
   skillExecutionService?: SkillExecutionService;
+  fileArtifactService?: NonNullable<RunServiceDependencies['fileArtifactService']>;
   webFetch?: WebFetch;
   officeParser?: OfficeParserService;
   mcpClientService?: McpClientService;
@@ -347,6 +348,7 @@ const createServiceDependencies = (
   ...(options.skillExecutionService
     ? { skillExecutionService: options.skillExecutionService }
     : {}),
+  ...(options.fileArtifactService ? { fileArtifactService: options.fileArtifactService } : {}),
   ...(options.webFetch ? { webFetch: options.webFetch } : {}),
   ...(options.officeParser ? { officeParser: options.officeParser } : {}),
   ...(options.mcpClientService ? { mcpClientService: options.mcpClientService } : {}),
@@ -5137,7 +5139,7 @@ describe('RunService', () => {
     },
   );
 
-  it.each(['succeeded', 'failed', 'timed-out', 'cancelled'] as const)(
+  it.each(['succeeded', 'failed', 'timed-out', 'cancelled', 'spawn-failed'] as const)(
     'bridges a registered Skill command with a %s result and a clean managed environment',
     async (outcome) => {
       const fixture = await createFixture();
@@ -5158,9 +5160,9 @@ describe('RunService', () => {
         ],
         environmentRequirements: [],
       });
-      const launch: ProcessSupervisor['launch'] = vi.fn(async (spec) => ({
-        executionId: spec.executionId,
-        result: Promise.resolve(
+      const launch: ProcessSupervisor['launch'] = vi.fn(async (spec) => {
+        if (outcome === 'spawn-failed') throw new Error('synthetic spawn failure');
+        const result =
           outcome === 'succeeded'
             ? {
                 kind: 'succeeded' as const,
@@ -5177,23 +5179,35 @@ describe('RunService', () => {
                   summary: 'synthetic',
                   retryable: false,
                 }
-              : { kind: outcome, cleanupCompleted: true, diagnosticOutputIds: [] },
-        ),
-        capture: () => ({
-          stdout: 'synthetic stdout',
-          stderr: 'synthetic stderr',
-          truncated: false,
-          receivedBytes: 32,
-          droppedBytes: 0,
-        }),
-        cancel: async () => ({ cleanupCompleted: true }),
-      }));
-      const execution = new SkillExecutionService(fixture.store, { launch });
+              : { kind: outcome, cleanupCompleted: true, diagnosticOutputIds: [] };
+        return {
+          executionId: spec.executionId,
+          result: Promise.resolve(result),
+          capture: () => ({
+            stdout: 'synthetic stdout',
+            stderr: 'synthetic stderr',
+            truncated: false,
+            receivedBytes: 32,
+            droppedBytes: 0,
+          }),
+          cancel: async () => ({ cleanupCompleted: true }),
+        };
+      });
+      const hostDiagnostics = new RunHostDiagnosticRecorder(fixture.store.runHostDiagnostics);
+      const execution = new SkillExecutionService(
+        fixture.store,
+        { launch },
+        undefined,
+        hostDiagnostics,
+      );
       const dependencies = {
         resolveEnvironmentPython: vi.fn(() => '/managed/python'),
       } as unknown as NonNullable<RunServiceDependencies['dependencies']>;
       const service = new RunService({
-        ...createServiceDependencies(fixture, { skillExecutionService: execution }),
+        ...createServiceDependencies(fixture, {
+          skillExecutionService: execution,
+          runHostDiagnosticRecorder: hostDiagnostics,
+        }),
         dependencies,
       });
       let runId = '';
@@ -5240,16 +5254,92 @@ describe('RunService', () => {
           PYTHONUNBUFFERED: '1',
           PYTHONNOUSERSITE: '1',
         });
-        const completed = fixture.store.runs
-          .listEvents(runId)
-          .find((event) => event.type === 'tool.completed');
-        expect(completed?.type === 'tool.completed' ? completed.output : undefined).toMatchObject({
-          status: outcome,
-          stdout: 'synthetic stdout',
-          stderr: 'synthetic stderr',
+        const events = fixture.store.runs.listEvents(runId);
+        const completed = events.find((event) => event.type === 'tool.completed');
+        if (outcome === 'spawn-failed') {
+          expect(events.some((event) => event.type === 'tool.failed')).toBe(true);
+        } else {
+          expect(completed?.type === 'tool.completed' ? completed.output : undefined).toMatchObject(
+            {
+              status: outcome,
+              stdout: 'synthetic stdout',
+              stderr: 'synthetic stderr',
+            },
+          );
+        }
+        const scriptExecution = fixture.store.executions.listExecutionsByRun(runId)[0];
+        expect(scriptExecution?.status).toBe(outcome === 'spawn-failed' ? 'failed' : outcome);
+        const hostEvents = fixture.store.runHostDiagnostics.listByRun(runId);
+        const dispatchTerminal = hostEvents.find(
+          (event) => event.phase === 'dispatch' && event.state !== 'started',
+        );
+        expect(dispatchTerminal).toMatchObject({
+          kind: 'skill-host',
+          phase: 'dispatch',
+          toolCallId: scriptExecution?.toolCallId,
+          state: outcome === 'spawn-failed' ? 'failed' : 'completed',
+          ...(outcome === 'spawn-failed' ? { errorCode: 'dispatch-failed' } : {}),
         });
-        expect(fixture.store.executions.listExecutionsByRun(runId)[0]?.status).toBe(outcome);
+        if (outcome === 'spawn-failed') {
+          expect(hostEvents.some((event) => event.phase === 'execute')).toBe(false);
+        } else {
+          expect(
+            hostEvents.find((event) => event.phase === 'execute' && event.state !== 'started'),
+          ).toMatchObject({
+            executionId: scriptExecution?.id,
+            toolCallId: scriptExecution?.toolCallId,
+            parentOperationId: dispatchTerminal?.operationId,
+            state:
+              outcome === 'succeeded'
+                ? 'completed'
+                : outcome === 'cancelled'
+                  ? 'cancelled'
+                  : 'failed',
+          });
+        }
         expect(statusOf(fixture, runId)).toBe('completed');
+        if (outcome === 'succeeded' && scriptExecution) {
+          const publish = vi.fn(async () => {
+            throw new Error('private publish failure');
+          });
+          const publishService = new RunService(
+            createServiceDependencies(fixture, {
+              fileArtifactService: { register: publish } as unknown as NonNullable<
+                RunServiceDependencies['fileArtifactService']
+              >,
+              runHostDiagnosticRecorder: hostDiagnostics,
+            }),
+          );
+          const register = (
+            publishService as unknown as {
+              registerFileArtifact: (
+                targetRunId: string,
+                input: ArtifactRegisterInput,
+              ) => Promise<unknown>;
+            }
+          ).registerFileArtifact.bind(publishService);
+          await expect(
+            register(runId, {
+              runId,
+              executionId: scriptExecution.id,
+              outputId: 'synthetic-output',
+              title: 'Synthetic deck',
+            }),
+          ).rejects.toThrow('private publish failure');
+          expect(publish).toHaveBeenCalledOnce();
+          expect(fixture.store.runHostDiagnostics.listByRun(runId)).toEqual(
+            expect.arrayContaining([
+              expect.objectContaining({
+                kind: 'skill-host',
+                phase: 'publish',
+                state: 'failed',
+                errorCode: 'publish-failed',
+                executionId: scriptExecution.id,
+                toolCallId: scriptExecution.toolCallId,
+              }),
+            ]),
+          );
+        }
       } finally {
         restore();
         await service.shutdown();

@@ -1,6 +1,8 @@
 import { createHash, randomUUID } from 'node:crypto';
 
 import type {
+  HostDiagnosticErrorCode,
+  JobFailurePhase,
   JobResult,
   JobSpec,
   RunSkillBinding,
@@ -11,6 +13,10 @@ import type {
 import type { ProcessSupervisor, SupervisorHandle } from '../infrastructure/process-supervisor';
 import { type AppStore, isTerminalExecutionStatus } from '../persistence';
 import type { ExecutionOutputService } from './execution-output-service';
+import type {
+  RunHostDiagnosticFinishInput,
+  RunHostDiagnosticRecorder,
+} from './run-host-diagnostic-recorder';
 import { computeDependencyFingerprint } from './skill-dependency-service';
 
 /** 设计 §8：Run 收口时清理最长 5 秒，超时走既有失败兜底并说明可能残留。 */
@@ -25,6 +31,7 @@ export interface CreateExecutionBindingInput {
 
 export interface StartExecutionInput {
   executionId?: string;
+  parentOperationId?: string;
   signal?: AbortSignal;
   runId: string;
   bindingId: string;
@@ -57,6 +64,57 @@ export interface CancelReport {
 const digestArguments = (args: Record<string, unknown>): string =>
   createHash('sha256').update(JSON.stringify(args)).digest('hex');
 
+const hostErrorCodeForPhase: Record<JobFailurePhase, HostDiagnosticErrorCode> = {
+  spawn: 'dispatch-failed',
+  execute: 'execute-failed',
+  validate: 'validate-failed',
+  publish: 'publish-failed',
+  cleanup: 'cleanup-failed',
+};
+
+const executionDiagnosticOutcome = (
+  result: JobResult,
+  truncated: boolean,
+  outputBytes: number,
+): RunHostDiagnosticFinishInput => {
+  const commonMetadata = { outputBytes, outputTruncated: truncated };
+  if (result.kind === 'succeeded') {
+    return {
+      state: 'completed',
+      metadata: {
+        ...commonMetadata,
+        result: 'success',
+        ...(result.exitCode >= -255 && result.exitCode <= 255 ? { exitCode: result.exitCode } : {}),
+      },
+    };
+  }
+  if (result.kind === 'failed') {
+    return {
+      state: 'failed',
+      errorCode: hostErrorCodeForPhase[result.phase],
+      metadata: { ...commonMetadata, result: 'failure' },
+    };
+  }
+  if (result.kind === 'timed-out') {
+    return {
+      state: 'failed',
+      errorCode: result.cleanupCompleted ? 'timed-out' : 'cleanup-failed',
+      metadata: { ...commonMetadata, result: 'failure' },
+    };
+  }
+  return result.cleanupCompleted
+    ? {
+        state: 'cancelled',
+        errorCode: 'cancelled',
+        metadata: { ...commonMetadata, result: 'cancelled' },
+      }
+    : {
+        state: 'failed',
+        errorCode: 'cleanup-failed',
+        metadata: { ...commonMetadata, result: 'failure' },
+      };
+};
+
 /**
  * 脚本执行编排：登记先于启动、取消与终止幂等、终态条件更新。
  *
@@ -80,11 +138,14 @@ export class SkillExecutionService {
   >();
   private readonly cancelling = new Set<string>();
   private readonly finishingRuns = new Set<string>();
+  private readonly dispatchParents = new Map<string, string>();
+  private readonly executeOperations = new Map<string, string>();
 
   constructor(
     private readonly store: AppStore,
     private readonly supervisor: ProcessSupervisor,
     private readonly outputs?: ExecutionOutputService,
+    private readonly hostDiagnostics?: RunHostDiagnosticRecorder,
   ) {}
 
   createBinding(input: CreateExecutionBindingInput): RunSkillBinding {
@@ -180,6 +241,9 @@ export class SkillExecutionService {
       workDirKey: input.workDirKey,
       attemptKey: executionId,
     });
+    if (input.parentOperationId) {
+      this.dispatchParents.set(executionId, input.parentOperationId);
+    }
 
     const spec: JobSpec = {
       protocolVersion: 1,
@@ -212,6 +276,7 @@ export class SkillExecutionService {
     } catch (error) {
       this.launches.delete(executionId);
       this.outputs?.discard(executionId);
+      this.dispatchParents.delete(executionId);
       this.store.executions.finishExecution(executionId, 'failed', {
         reason: 'spawn-failed',
         finishedAt: Date.now(),
@@ -231,7 +296,7 @@ export class SkillExecutionService {
     this.store.executions.markRunning(executionId, Date.now());
     this.settling.set(
       executionId,
-      this.settle(executionId, handle, spec).catch((error: unknown) => {
+      this.settle(executionId, handle, spec, input.parentOperationId).catch((error: unknown) => {
         console.error(`Execution ${executionId} could not be settled`, error);
       }),
     );
@@ -285,10 +350,30 @@ export class SkillExecutionService {
     }
     this.cancelling.add(executionId);
     try {
+      const parentOperationId =
+        this.executeOperations.get(executionId) ?? this.dispatchParents.get(executionId);
+      const cleanupOperation = this.hostDiagnostics?.beginOperation({
+        kind: 'skill-host',
+        phase: 'cleanup',
+        runId: execution.runId,
+        executionId,
+        toolCallId: execution.toolCallId,
+        ...(parentOperationId ? { parentOperationId } : {}),
+        errorCode: 'cleanup-failed',
+      });
       const cleanup = await boundedCleanup(async () => {
         const handle = this.handles.get(executionId) ?? (await this.launches.get(executionId));
         return handle ? handle.cancel() : { cleanupCompleted: false };
       });
+      cleanupOperation?.finish(
+        cleanup.cleanupCompleted
+          ? { state: 'completed', metadata: { result: 'success' } }
+          : {
+              state: 'failed',
+              errorCode: 'cleanup-failed',
+              metadata: { result: 'failure' },
+            },
+      );
       const applied = cleanup.cleanupCompleted
         ? this.store.executions.finishExecution(executionId, 'cancelled', {
             reason,
@@ -347,7 +432,20 @@ export class SkillExecutionService {
     executionId: string,
     handle: SupervisorHandle,
     spec: JobSpec,
+    parentOperationId?: string,
   ): Promise<void> {
+    const executeOperation = this.hostDiagnostics?.beginOperation({
+      kind: 'skill-host',
+      phase: 'execute',
+      runId: spec.runId,
+      executionId,
+      toolCallId: spec.toolCallId,
+      ...(parentOperationId ? { parentOperationId } : {}),
+      errorCode: 'execute-failed',
+    });
+    if (executeOperation?.recorded) {
+      this.executeOperations.set(executionId, executeOperation.operationId);
+    }
     try {
       const result = await handle.result;
       const snapshot = handle.capture();
@@ -356,6 +454,9 @@ export class SkillExecutionService {
         stderr: snapshot.stderr,
         truncated: snapshot.truncated,
       });
+      executeOperation?.finish(
+        executionDiagnosticOutcome(result, snapshot.truncated, snapshot.receivedBytes),
+      );
       if (result.kind === 'succeeded' && this.outputs) {
         if (
           this.finishingRuns.has(spec.runId) ||
@@ -369,6 +470,17 @@ export class SkillExecutionService {
           });
           return;
         }
+        const validationOperation = this.hostDiagnostics?.beginOperation({
+          kind: 'skill-host',
+          phase: 'validate',
+          runId: spec.runId,
+          executionId,
+          toolCallId: spec.toolCallId,
+          ...(executeOperation?.recorded
+            ? { parentOperationId: executeOperation.operationId }
+            : {}),
+          errorCode: 'validate-failed',
+        });
         try {
           const verified = this.outputs.collect(spec, snapshot);
           this.store.transaction(() => {
@@ -379,7 +491,20 @@ export class SkillExecutionService {
               ...(verified[0] ? { reportHash: verified[0].reportHash } : {}),
             });
           });
+          validationOperation?.finish({
+            state: 'completed',
+            metadata: {
+              result: 'success',
+              outputBytes: verified.reduce((total, output) => total + output.fileSize, 0),
+              outputTruncated: snapshot.truncated,
+            },
+          });
         } catch (error) {
+          validationOperation?.finish({
+            state: 'failed',
+            errorCode: 'validate-failed',
+            metadata: { result: 'rejected', outputTruncated: snapshot.truncated },
+          });
           this.recordResult(executionId, {
             kind: 'failed',
             phase: 'validate',
@@ -390,7 +515,30 @@ export class SkillExecutionService {
         }
       } else this.recordResult(executionId, result);
     } catch (error) {
+      executeOperation?.finish({
+        state: 'failed',
+        errorCode: 'execute-failed',
+        metadata: { result: 'failure' },
+      });
+      const cleanupOperation = this.hostDiagnostics?.beginOperation({
+        kind: 'skill-host',
+        phase: 'cleanup',
+        runId: spec.runId,
+        executionId,
+        toolCallId: spec.toolCallId,
+        ...(executeOperation?.recorded ? { parentOperationId: executeOperation.operationId } : {}),
+        errorCode: 'cleanup-failed',
+      });
       const cleanup = await boundedCleanup(() => handle.cancel());
+      cleanupOperation?.finish(
+        cleanup.cleanupCompleted
+          ? { state: 'completed', metadata: { result: 'success' } }
+          : {
+              state: 'failed',
+              errorCode: 'cleanup-failed',
+              metadata: { result: 'failure' },
+            },
+      );
       this.recordResult(executionId, {
         kind: 'failed',
         phase: cleanup.cleanupCompleted ? 'execute' : 'cleanup',
@@ -402,6 +550,8 @@ export class SkillExecutionService {
       this.outputs?.discard(executionId);
       this.handles.delete(executionId);
       this.settling.delete(executionId);
+      this.dispatchParents.delete(executionId);
+      this.executeOperations.delete(executionId);
     }
   }
 }
