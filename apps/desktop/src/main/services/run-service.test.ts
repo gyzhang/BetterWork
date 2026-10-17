@@ -34,6 +34,7 @@ import { McpClientService } from './mcp-client-service';
 import { mcpModelAlias } from './mcp-tool-contract';
 import { MemoryService } from './memory-service';
 import { NotificationService } from './notification-service';
+import { RunHostDiagnosticRecorder } from './run-host-diagnostic-recorder';
 import { createRunService, RunService, type RunServiceDependencies } from './run-service';
 import { createRunTools } from './run-tool-context';
 import { ScheduleExecutionService } from './schedule-execution-service';
@@ -306,6 +307,7 @@ interface ServiceOptions {
   credentialAccess?: CredentialResolver;
   documentExtractor?: DocumentExtractor;
   onScheduledRunTerminal?: (runId: string) => Promise<unknown>;
+  runHostDiagnosticRecorder?: RunHostDiagnosticRecorder;
 }
 
 const createServiceDependencies = (
@@ -353,6 +355,9 @@ const createServiceDependencies = (
   ...(options.onScheduledRunTerminal
     ? { onScheduledRunTerminal: options.onScheduledRunTerminal }
     : {}),
+  runHostDiagnosticRecorder:
+    options.runHostDiagnosticRecorder ??
+    new RunHostDiagnosticRecorder(fixture.store.runHostDiagnostics),
 });
 
 const createService = (fixture: Fixture, options: ServiceOptions = {}): RunService =>
@@ -539,8 +544,56 @@ describe('RunService', () => {
           'SELECT diagnostics_recording_version, diagnostics_sections_json FROM runs WHERE id = ?',
         )
         .get(runId),
-    ).toEqual({ diagnostics_recording_version: 1, diagnostics_sections_json: '["core"]' });
+    ).toEqual({ diagnostics_recording_version: 2, diagnostics_sections_json: '["core","host"]' });
     await waitForCompletion(fixture, runId);
+  });
+
+  it('records prepare, audit, and artifact commit around the existing RunService lifecycle', async () => {
+    const fixture = await createFixture();
+    const service = createService(fixture);
+    const runId = service.start({
+      taskId: fixture.taskId,
+      sessionId: fixture.sessionId,
+      prompt: '离线核对宿主阶段观测',
+    });
+
+    await waitForCompletion(fixture, runId);
+
+    expect(
+      fixture.store.runHostDiagnostics.listByRun(runId).map(({ phase, state }) => [phase, state]),
+    ).toEqual([
+      ['prepare', 'started'],
+      ['prepare', 'completed'],
+      ['audit', 'started'],
+      ['audit', 'completed'],
+      ['artifact-commit', 'started'],
+      ['artifact-commit', 'completed'],
+    ]);
+    expect(statusOf(fixture, runId)).toBe('completed');
+  });
+
+  it('records a failed prepare while preserving its existing failed terminal', async () => {
+    const fixture = await createFixture();
+    const service = createService(fixture);
+    vi.spyOn(fixture.store.taskContinuity, 'prepareRunContext').mockImplementation(() => {
+      throw new Error('synthetic continuity prepare failure');
+    });
+
+    const runId = service.start({
+      taskId: fixture.taskId,
+      sessionId: fixture.sessionId,
+      prompt: '触发准备失败收口',
+    });
+
+    expect(statusOf(fixture, runId)).toBe('failed');
+    expect(fixture.store.runHostDiagnostics.listByRun(runId)).toMatchObject([
+      { phase: 'prepare', state: 'started' },
+      { phase: 'prepare', state: 'failed', errorCode: 'prepare-failed' },
+    ]);
+    expect(fixture.store.runs.listEvents(runId).at(-1)).toMatchObject({
+      type: 'run.failed',
+      error: 'Task Continuity 简报准备失败：synthetic continuity prepare failure',
+    });
   });
 
   it('rolls back the Run and its diagnostics marker when the same creation transaction fails', async () => {
@@ -5413,6 +5466,12 @@ describe('RunService robustness regressions', () => {
       expect(accepted).toEqual([false]);
       expect(statusOf(fixture, runId)).toBe('completed');
       expect(fixture.store.artifacts.list(fixture.taskId)).toHaveLength(1);
+      expect(
+        fixture.store.runHostDiagnostics
+          .listByRun(runId)
+          .filter((event) => event.phase === 'artifact-commit')
+          .map(({ state }) => state),
+      ).toEqual(['started', 'completed']);
     } finally {
       await service.shutdown();
     }

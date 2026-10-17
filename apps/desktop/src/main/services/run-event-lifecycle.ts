@@ -4,6 +4,7 @@ import { describeError, isAbortError } from '@betterwork/agent-core';
 import type { AgentRuntimeEvent } from '@betterwork/agent-protocol';
 
 import type { RunRepository } from '../persistence/run-repository';
+import type { RunHostDiagnosticRecorder } from './run-host-diagnostic-recorder';
 
 type RunTerminalEvent = Extract<
   AgentRuntimeEvent,
@@ -15,6 +16,7 @@ interface RunEventLifecycleDependencies {
   dispatch: (event: AgentRuntimeEvent) => void;
   finishSkills?: (runId: string) => Promise<{ cleanupFailed: number }>;
   releaseMcp?: (runId: string) => Promise<void>;
+  runHostDiagnosticRecorder?: RunHostDiagnosticRecorder;
 }
 
 interface RunCompletionHooks {
@@ -40,8 +42,11 @@ export class RunEventLifecycle {
     let terminalEvent: RunTerminalEvent | undefined;
     for await (const event of events) {
       if (isRunTerminalEvent(event)) {
-        if (event.type === 'run.completed' && !signal.aborted)
-          hooks.auditFinalContent(event.finalContent);
+        if (event.type === 'run.completed' && !signal.aborted) {
+          this.observeSync(runId, 'audit', 'audit-failed', () =>
+            hooks.auditFinalContent(event.finalContent),
+          );
+        }
         terminalEvent = event;
         break;
       }
@@ -56,11 +61,13 @@ export class RunEventLifecycle {
     }
     if (terminalEvent.type === 'run.completed' && signal.aborted)
       terminalEvent = this.cancellationEvent(runId, signal);
-    hooks.beginCommit();
-    if (terminalEvent.type === 'run.completed') {
-      await hooks.saveMarkdownArtifact(terminalEvent.finalContent);
-    }
-    this.publish(terminalEvent);
+    await this.observe(runId, 'artifact-commit', 'commit-failed', async () => {
+      hooks.beginCommit();
+      if (terminalEvent.type === 'run.completed') {
+        await hooks.saveMarkdownArtifact(terminalEvent.finalContent);
+      }
+      this.publish(terminalEvent);
+    });
     if (terminalEvent.type === 'run.completed') await hooks.afterCompleted();
   }
 
@@ -75,18 +82,46 @@ export class RunEventLifecycle {
 
   private async cleanup(runId: string): Promise<string[]> {
     const errors: string[] = [];
-    try {
-      const cleanup = await this.ports.finishSkills?.(runId);
-      if (cleanup && cleanup.cleanupFailed > 0) throw new Error('未能确认全部子进程已停止');
-    } catch (error) {
-      errors.push(`子进程清理失败：${describeError(error)}`);
+    const finishSkills = this.ports.finishSkills;
+    if (finishSkills) {
+      try {
+        await this.observe(runId, 'skill-cleanup', 'cleanup-failed', async () => {
+          const cleanup = await finishSkills(runId);
+          if (cleanup.cleanupFailed > 0) throw new Error('未能确认全部子进程已停止');
+        });
+      } catch (error) {
+        errors.push(`子进程清理失败：${describeError(error)}`);
+      }
     }
-    try {
-      await this.ports.releaseMcp?.(runId);
-    } catch (error) {
-      errors.push(`MCP 连接清理失败：${describeError(error)}`);
+    const releaseMcp = this.ports.releaseMcp;
+    if (releaseMcp) {
+      try {
+        await this.observe(runId, 'mcp-cleanup', 'cleanup-failed', () => releaseMcp(runId));
+      } catch (error) {
+        errors.push(`MCP 连接清理失败：${describeError(error)}`);
+      }
     }
     return errors;
+  }
+
+  private observeSync<T>(
+    runId: string,
+    phase: 'audit',
+    errorCode: 'audit-failed',
+    operation: () => T,
+  ): T {
+    const recorder = this.ports.runHostDiagnosticRecorder;
+    return recorder ? recorder.observeSync({ runId, phase, errorCode }, operation) : operation();
+  }
+
+  private observe<T>(
+    runId: string,
+    phase: 'skill-cleanup' | 'mcp-cleanup' | 'artifact-commit',
+    errorCode: 'cleanup-failed' | 'commit-failed',
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    const recorder = this.ports.runHostDiagnosticRecorder;
+    return recorder ? recorder.observe({ runId, phase, errorCode }, operation) : operation();
   }
 
   private cancellationEvent(runId: string, signal: AbortSignal): RunTerminalEvent {

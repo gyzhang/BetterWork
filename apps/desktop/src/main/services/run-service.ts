@@ -88,6 +88,7 @@ import type { NotificationService } from './notification-service';
 import type { ResolvedRunContext } from './run-context-resolver';
 import { resolveRunContext } from './run-context-resolver';
 import { isRunTerminalEvent, RunEventLifecycle } from './run-event-lifecycle';
+import { type RunHostDiagnosticRecorder } from './run-host-diagnostic-recorder';
 import { createRunToolContext } from './run-tool-context';
 import { RunToolResultAdapter } from './run-tool-result-adapter';
 import { createQianfanSearchClient } from './search-engine-service';
@@ -226,6 +227,7 @@ export interface RunServiceDependencies {
   readonly knowledgeSearchService?: KnowledgeSearchService;
   readonly documentExtractor?: DocumentExtractor;
   readonly onScheduledRunTerminal?: (runId: string) => Promise<unknown>;
+  readonly runHostDiagnosticRecorder?: RunHostDiagnosticRecorder;
 }
 
 const productionDependencyKeys = {
@@ -248,6 +250,7 @@ const productionDependencyKeys = {
   knowledgeSearchService: true,
   documentExtractor: true,
   onScheduledRunTerminal: true,
+  runHostDiagnosticRecorder: true,
 } satisfies Record<keyof RunServiceDependencies, true>;
 
 /** 生产装配边界：接线错误在任何 Run 派发前失败，错误只包含依赖名。 */
@@ -288,6 +291,7 @@ export class RunService {
   private readonly knowledgeSearchService: KnowledgeSearchService | undefined;
   private readonly documentExtractor: DocumentExtractor | undefined;
   private readonly onScheduledRunTerminal: ((runId: string) => Promise<unknown>) | undefined;
+  private readonly runHostDiagnosticRecorder: RunHostDiagnosticRecorder | undefined;
   private stopping = false;
   private readonly activeRuns = new Map<string, ActiveRun>();
   private readonly consumePromises = new Map<string, Promise<void>>();
@@ -337,6 +341,7 @@ export class RunService {
     this.knowledgeSearchService = ports.knowledgeSearchService;
     this.documentExtractor = ports.documentExtractor;
     this.onScheduledRunTerminal = ports.onScheduledRunTerminal;
+    this.runHostDiagnosticRecorder = ports.runHostDiagnosticRecorder;
     this.toolResultAdapter = new RunToolResultAdapter({
       store: this.store,
       getMcpBinding: (runId, toolName) => this.mcpClientService?.getRunToolBinding(runId, toolName),
@@ -348,6 +353,9 @@ export class RunService {
       dispatch: (event) => this.dispatch(event),
       ...(skillExecution ? { finishSkills: (runId) => skillExecution.finishRun(runId) } : {}),
       ...(mcpClient ? { releaseMcp: (runId) => mcpClient.releaseRun(runId) } : {}),
+      ...(this.runHostDiagnosticRecorder
+        ? { runHostDiagnosticRecorder: this.runHostDiagnosticRecorder }
+        : {}),
     });
   }
 
@@ -493,15 +501,25 @@ export class RunService {
     let continuitySnapshot: RunContinuityContext;
     let continuityPlan: TaskContinuityContextPlan;
     try {
-      const prepared = this.prepareTaskContinuityContext(input.taskId, runId);
+      const prepare = () => {
+        const prepared = this.prepareTaskContinuityContext(input.taskId, runId);
+        const snapshot = this.store.taskContinuity.prepareRunContext({
+          runId,
+          taskId: input.taskId,
+          revisionId: prepared.revisionId,
+          brief: prepared.plan.brief,
+          omissions: prepared.plan.omissions,
+        });
+        return { plan: prepared.plan, snapshot };
+      };
+      const prepared = this.runHostDiagnosticRecorder
+        ? this.runHostDiagnosticRecorder.observeSync(
+            { runId, phase: 'prepare', errorCode: 'prepare-failed' },
+            prepare,
+          )
+        : prepare();
       continuityPlan = prepared.plan;
-      continuitySnapshot = this.store.taskContinuity.prepareRunContext({
-        runId,
-        taskId: input.taskId,
-        revisionId: prepared.revisionId,
-        brief: continuityPlan.brief,
-        omissions: continuityPlan.omissions,
-      });
+      continuitySnapshot = prepared.snapshot;
     } catch (error) {
       this.activeRuns.delete(runId);
       this.eventLifecycle.fail(runId, `Task Continuity 简报准备失败：${describeError(error)}`);

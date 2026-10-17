@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { AppStore } from '../persistence';
 import { isRunTerminalEvent, RunEventLifecycle } from './run-event-lifecycle';
+import { RunHostDiagnosticRecorder } from './run-host-diagnostic-recorder';
 
 const stores: AppStore[] = [];
 afterEach(() => {
@@ -35,17 +36,26 @@ const setup = (
   const workspace = store.workspaces.getOrCreate('/tmp/c4-fixture', 'C4');
   const { task, sessionId } = store.tasks.create(workspace.id, 'C4', 'lifecycle');
   const runId = randomUUID();
-  store.runs.create({
-    id: runId,
-    taskId: task.id,
-    sessionId,
-    prompt: 'input',
-    status: 'running',
-    createdAt: 1,
+  store.runs.create(
+    {
+      id: runId,
+      taskId: task.id,
+      sessionId,
+      prompt: 'input',
+      status: 'running',
+      createdAt: 1,
+    },
+    { version: 2, sections: ['core', 'host'] },
+  );
+  let clock = 1;
+  const runHostDiagnosticRecorder = new RunHostDiagnosticRecorder(store.runHostDiagnostics, {
+    wallNow: () => clock++,
+    monotonicNow: () => clock++,
   });
   const dispatched: AgentRuntimeEvent[] = [];
   const lifecycle = new RunEventLifecycle({
     ...ports,
+    ...(ports.runHostDiagnosticRecorder === undefined ? { runHostDiagnosticRecorder } : {}),
     journal: store.runs,
     dispatch: (event) => {
       expect(store.runs.listEvents(runId)).toContainEqual(event);
@@ -265,6 +275,12 @@ describe('RunEventLifecycle', () => {
       expect(types(fixture.dispatched)).toEqual(['run.started', 'run.failed']);
       expect(fixture.store.artifacts.list()).toEqual([]);
       expect(mcpReleased).toBe(true);
+      expect(fixture.store.runHostDiagnostics.listByRun(fixture.runId).slice(-4)).toMatchObject([
+        { phase: 'skill-cleanup', state: 'started' },
+        { phase: 'skill-cleanup', state: 'failed', errorCode: 'cleanup-failed' },
+        { phase: 'mcp-cleanup', state: 'started' },
+        { phase: 'mcp-cleanup', state: 'completed' },
+      ]);
     },
   );
 
@@ -313,6 +329,10 @@ describe('RunEventLifecycle', () => {
     expect(fixture.store.runs.get(fixture.runId)?.status).toBe('failed');
     expect(types(fixture.dispatched)).toEqual(['run.started', 'run.failed']);
     expect(fixture.store.artifacts.list()).toEqual([]);
+    expect(fixture.store.runHostDiagnostics.listByRun(fixture.runId).slice(-2)).toMatchObject([
+      { phase: 'artifact-commit', state: 'started' },
+      { phase: 'artifact-commit', state: 'failed', errorCode: 'commit-failed' },
+    ]);
   });
 
   it('keeps completed state and artifact when a post-completion callback fails', async () => {
@@ -325,6 +345,10 @@ describe('RunEventLifecycle', () => {
     expect(fixture.store.runs.get(fixture.runId)?.status).toBe('completed');
     expect(fixture.store.artifacts.list()).toHaveLength(1);
     expect(types(fixture.dispatched)).toEqual(['run.started', 'run.completed']);
+    expect(fixture.store.runHostDiagnostics.listByRun(fixture.runId).slice(-2)).toMatchObject([
+      { phase: 'artifact-commit', state: 'started' },
+      { phase: 'artifact-commit', state: 'completed' },
+    ]);
   });
 
   it('retains a persisted ordinary event when result dispatch throws, then fails the Run', async () => {
@@ -468,6 +492,10 @@ describe('Lifecycle robustness regressions', () => {
           type: 'run.cancelled',
           reason: 'cancel while cleaning',
         });
+        expect(fixture.store.runHostDiagnostics.listByRun(fixture.runId).slice(-2)).toMatchObject([
+          { phase: 'artifact-commit', state: 'started' },
+          { phase: 'artifact-commit', state: 'completed' },
+        ]);
       } finally {
         released.resolve();
         await pending;
@@ -496,5 +524,50 @@ describe('Lifecycle robustness regressions', () => {
     });
     expect(failure).toMatchObject({ error: expect.stringContaining('mcp cleanup failure') });
     expect(fixture.store.artifacts.list()).toHaveLength(0);
+  });
+
+  it('records audit, both cleanup boundaries, and the artifact commit in observed order', async () => {
+    const calls: string[] = [];
+    const fixture = setup({
+      finishSkills: async () => {
+        calls.push('skill-cleanup');
+        return { cleanupFailed: 0 };
+      },
+      releaseMcp: async () => {
+        calls.push('mcp-cleanup');
+      },
+    });
+    await fixture.execute(stream([fixture.started, fixture.completed]), {
+      auditFinalContent: () => calls.push('audit'),
+      beginCommit: () => calls.push('begin-commit'),
+      saveMarkdownArtifact: async (content) => {
+        calls.push('artifact');
+        await fixture.hooks.saveMarkdownArtifact(content);
+      },
+      afterCompleted: async () => {
+        calls.push('after-completed');
+      },
+    });
+
+    expect(calls).toEqual([
+      'audit',
+      'skill-cleanup',
+      'mcp-cleanup',
+      'begin-commit',
+      'artifact',
+      'after-completed',
+    ]);
+    expect(fixture.store.runHostDiagnostics.listByRun(fixture.runId)).toMatchObject([
+      { kind: 'run-host', phase: 'audit', state: 'started', diagnosticSequence: 0 },
+      { kind: 'run-host', phase: 'audit', state: 'completed', diagnosticSequence: 1 },
+      { kind: 'run-host', phase: 'skill-cleanup', state: 'started', diagnosticSequence: 2 },
+      { kind: 'run-host', phase: 'skill-cleanup', state: 'completed', diagnosticSequence: 3 },
+      { kind: 'run-host', phase: 'mcp-cleanup', state: 'started', diagnosticSequence: 4 },
+      { kind: 'run-host', phase: 'mcp-cleanup', state: 'completed', diagnosticSequence: 5 },
+      { kind: 'run-host', phase: 'artifact-commit', state: 'started', diagnosticSequence: 6 },
+      { kind: 'run-host', phase: 'artifact-commit', state: 'completed', diagnosticSequence: 7 },
+    ]);
+    expect(fixture.store.runs.get(fixture.runId)?.status).toBe('completed');
+    expect(fixture.store.artifacts.list()).toHaveLength(1);
   });
 });

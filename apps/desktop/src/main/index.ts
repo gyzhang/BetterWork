@@ -56,6 +56,7 @@ import { MemoryService } from './services/memory-service';
 import { ModelProviderFactory } from './services/model-provider-factory';
 import { NotificationActivationService } from './services/notification-activation-service';
 import { NotificationService } from './services/notification-service';
+import { RunHostDiagnosticRecorder } from './services/run-host-diagnostic-recorder';
 import { createRunService, type RunService } from './services/run-service';
 import { ScheduleDirectorySourcesService } from './services/schedule-directory-sources';
 import { ScheduleDispatchService } from './services/schedule-dispatch-service';
@@ -542,6 +543,10 @@ function bootstrap(initiallySuspended: boolean): ApplicationContext {
     createLogSink: (executionId) =>
       createExecutionLog(path.join(userData, 'execution-logs'), executionId),
   });
+  const runHostDiagnosticRecorder = new RunHostDiagnosticRecorder(store.runHostDiagnostics, {
+    wallNow: () => Date.now(),
+    monotonicNow: () => performance.now(),
+  });
   const skillExecutionService = new SkillExecutionService(
     store,
     supervisor,
@@ -649,6 +654,7 @@ function bootstrap(initiallySuspended: boolean): ApplicationContext {
     credentialAccess,
     knowledgeSearchService: knowledgeSearch,
     documentExtractor: knowledgeWorker.extractor,
+    runHostDiagnosticRecorder,
     onScheduledRunTerminal: (runId) => scheduleOutcomeService.finalizeRun(runId),
   });
   mcpClientService.setRunCanceller((runId) => {
