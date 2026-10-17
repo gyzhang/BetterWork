@@ -51,7 +51,7 @@
 | AT22 | 离线总收口与人工验收清单 | AT21 | M4 | done | 核对 AT01–AT21 提交、当前分支/HEAD、v50 与 Main 生产装配；帮助 §8.3 补当前/历史入口和筛选、标记、导出说明。离线回归：11 文件/540 项、RunService/SQLite 跨层 1 项、App 回答保存 2 项均通过；`check:quick -- --base 2e57b337` 退出 0（本卡仅文档差异，docs 156）。人工清单已写入但待人执行；UI、真实模型、安装、性能未验；详见日志 |
 | AT23 | 真实 UI 专项与人工走查 | AT22 | 独立 | doing | 用户已安排本轮继续 AT11–AT25；`--diagnostics-only` 覆盖青玉明/暗 × 760/1380 × 普通/减动效 8 组，验证实时宿主阶段、长双语载荷无横向溢出、问题标记失败保留后重试、导出取消、工作空间筛选、失败/停止 Run 回看、Tab/Esc 焦点归还及 reasoning 不显示；专项 8 组、全量 `ui:check` 82 组和 app-only 1 组通过，真实 App/Preload/IPC/临时 SQLite 重开旅程 17 步与进程恢复通过。`check:quick -- --base 18daa331` 退出 0（lint、format、typecheck、docs 156；无匹配 Vitest 用例，页面行为由独立 UI 门禁覆盖）。AI 截图走查读数正文最小 12px、无横向溢出，未发现页面缺陷；截图在 `/tmp/betterwork-at23-fullui.Eg4foa` 与 `/tmp/betterwork-at23-appfinal.n0Rb7s`。实际人工验收仍待填写，不代签 |
 | AT24 | 真实模型语义与业务验收 | AT22 | 独立 | todo | 待模型配置/预算授权，未计入离线目标 |
-| AT25 | 固定版本 OTel/OTLP 出口 | AT22 | 可选 | todo | 尚未授权扩展；不是本地主链路前置 |
+| AT25 | 固定版本 OTel/OTLP 出口 | AT22 | 可选 | todo | 用户于 2026-10-17 明确决定本轮跳过；未实施且未授权对外发送。状态保留 todo，OTLP 不是本地主链路前置 |
 
 ## 3. 所有代码卡共同执行
 
