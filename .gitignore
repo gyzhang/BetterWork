@@ -9,6 +9,7 @@ release/
 coverage/
 /apps/desktop/build/python-runtime-assets/
 /apps/desktop/build/node-runtime/
+/apps/desktop/build/github-mcp-runtime/
 
 # Local configuration and logs
 .env

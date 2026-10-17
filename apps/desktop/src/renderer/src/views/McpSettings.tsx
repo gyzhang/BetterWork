@@ -43,7 +43,7 @@ interface SecretEnv {
 interface McpForm {
   name: string;
   kind: McpTransport['kind'];
-  stdioRuntime: 'custom' | 'filesystem' | 'memory' | 'sequential-thinking' | 'fetch';
+  stdioRuntime: 'custom' | 'filesystem' | 'memory' | 'sequential-thinking' | 'fetch' | 'github';
   command: string;
   args: string;
   cwd: string;
@@ -97,12 +97,33 @@ const stdioRuntimeOptions = [
   { id: 'memory', label: '内置 · 记忆' },
   { id: 'sequential-thinking', label: '内置 · 顺序思考' },
   { id: 'fetch', label: '内置 · 网页抓取' },
+  { id: 'github', label: '内置 · GitHub（只读）' },
 ];
 const stdioRuntimeNames: Record<Exclude<McpForm['stdioRuntime'], 'custom'>, string> = {
   filesystem: '内置 · 文件系统',
   memory: '内置 · 记忆',
   'sequential-thinking': '内置 · 顺序思考',
   fetch: '内置 · 网页抓取',
+  github: '内置 · GitHub（只读）',
+};
+const githubTokenVariable = 'GITHUB_PERSONAL_ACCESS_TOKEN';
+const withGithubTokenSecret = (form: McpForm): Pick<McpForm, 'env' | 'secretEnv'> => {
+  const existingSecret = form.secretEnv.find((item) => item.name === githubTokenVariable);
+  if (existingSecret) return { env: form.env, secretEnv: form.secretEnv };
+  const prefix = `${githubTokenVariable}=`;
+  const lines = form.env.split('\n');
+  const existingPlaintext = lines.find((line) => line.startsWith(prefix));
+  return {
+    env: lines.filter((line) => !line.startsWith(prefix)).join('\n'),
+    secretEnv: [
+      ...form.secretEnv,
+      {
+        name: githubTokenVariable,
+        value: existingPlaintext?.slice(prefix.length) ?? '',
+        clear: false,
+      },
+    ],
+  };
 };
 const authOptions = [
   { id: 'none', label: '无认证' },
@@ -204,6 +225,11 @@ export function McpSettings({ state }: { state: McpConnectionsState }): React.JS
       next.secretEnv = (transport.env ?? [])
         .filter((item) => item.secret)
         .map((item) => ({ name: item.name, value: '', clear: false }));
+      if (next.stdioRuntime === 'github') {
+        const githubToken = withGithubTokenSecret(next);
+        next.env = githubToken.env;
+        next.secretEnv = githubToken.secretEnv;
+      }
     } else {
       next.endpoint = transport.endpoint;
       next.networkMode = transport.networkMode;
@@ -933,10 +959,14 @@ export function McpSettings({ state }: { state: McpConnectionsState }): React.JS
                       stdioRuntime: stdioRuntime as McpForm['stdioRuntime'],
                       command: stdioRuntime === 'custom' ? form.command : '',
                       cwd: stdioRuntime === 'custom' ? form.cwd : '',
+                      ...(stdioRuntime === 'github' ? withGithubTokenSecret(form) : {}),
                     })
                   }
                 />
               </Field>
+              {form.stdioRuntime === 'github' ? (
+                <StatusNote message="GitHub MCP 仅开放只读工具。请在下方机密环境变量中保存仅对目标仓库有读取权限的 GitHub Token；连接检测不会调用 GitHub 业务工具。" />
+              ) : null}
               {form.stdioRuntime === 'custom' ? (
                 <Field label="启动命令">
                   <TextField
@@ -964,7 +994,11 @@ export function McpSettings({ state }: { state: McpConnectionsState }): React.JS
                   />
                 </Field>
               ) : null}
-              <Disclosure label="环境变量">
+              <Disclosure
+                key={form.stdioRuntime}
+                label="环境变量"
+                defaultOpen={form.stdioRuntime === 'github'}
+              >
                 <Field label="普通环境变量（每行 NAME=value）">
                   <TextArea
                     mono
@@ -991,7 +1025,11 @@ export function McpSettings({ state }: { state: McpConnectionsState }): React.JS
                     <Field
                       controlId={`mcp-env-secret-${index}`}
                       label={`${item.name || '机密变量'} 的新值`}
-                      hint="空白沿用已保存凭据，值只写不读。"
+                      hint={
+                        item.name === githubTokenVariable
+                          ? 'GitHub Token 由算台加密保存，只在 MCP 子进程中使用；空白沿用已保存凭据。'
+                          : '空白沿用已保存凭据，值只写不读。'
+                      }
                     >
                       <TextField
                         size="md"

@@ -14,7 +14,7 @@
 
 | 设置中显示 | 配置内容 | 对应协议与兼容行为 |
 | --- | --- | --- |
-| 本地命令 · stdio | 自定义可执行文件/参数，或显式内置 server ID；可选工作目录、普通环境变量与机密环境变量 | 内置 Node/Python 运行时见 [ADR-0045](../adr/0045-bundled-runtimes-for-local-mcp.md)；优先探测 `2026-07-28`，兼容旧服务 |
+| 本地命令 · stdio | 自定义可执行文件/参数，或显式内置 server ID；可选工作目录、普通环境变量与机密环境变量 | 内置 Node/Python/GitHub 运行时见 [ADR-0045](../adr/0045-bundled-runtimes-for-local-mcp.md) 与 [ADR-0052](../adr/0052-bundled-github-mcp.md)；优先探测 `2026-07-28`，兼容旧服务 |
 | HTTP · Streamable HTTP | 精确服务地址、认证方式、网络范围 | 支持 `2026-07-28` 及旧 Streamable HTTP；处理 JSON 与请求内 SSE 两种响应 |
 | 旧版 SSE · HTTP+SSE | 精确 SSE 地址、认证方式、网络范围 | 明确标为旧服务兼容；使用旧握手与双端点传输 |
 
@@ -99,9 +99,11 @@ stdio 由 Main 启动；进程与取消清理复用 macOS supervisor。新旧版
 
 ### 7.1 内置 stdio MCP 运行时（2026-10-09）
 
-产品登记的内置 MCP 使用协议中的固定 `serverId`，与用户自定义命令明确区分。filesystem、memory、sequential-thinking 的锁定 JavaScript 入口和独立 Node.js 运行时随安装包分发，由随包运行时启动；用户不需要单独安装 Node.js、npm 或 npx。fetch 使用 CPython 3.12 darwin/arm64 和单独的依赖锁/wheelhouse；CPython 压缩包与 fetch wheels 在安装包中，首次连接检测时解压基础发行版并为 MCP 服务创建独立 venv，绝不复用 PPT Skill 环境。主进程与 Skill 共享受管 Python 服务，因此同一 CPython 制品也供兼容的 Python Skill/CLI 环境使用；PPT 与 fetch 的依赖仍由不同锁和 venv 隔离。
+产品登记的内置 MCP 使用协议中的固定 `serverId`，与用户自定义命令明确区分。filesystem、memory、sequential-thinking 的锁定 JavaScript 入口和独立 Node.js 运行时随安装包分发，由随包运行时启动；用户不需要单独安装 Node.js、npm 或 npx。fetch 使用 CPython 3.12 darwin/arm64 和单独的依赖锁/wheelhouse；CPython 压缩包与 fetch wheels 在安装包中，首次连接检测时解压基础发行版并为 MCP 服务创建独立 venv，绝不复用 PPT Skill 环境。GitHub 使用固定版本的官方 macOS arm64 Go 可执行文件，见 [ADR-0052](../adr/0052-bundled-github-mcp.md)。主进程与 Skill 共享受管 Python 服务，因此同一 CPython 制品也供兼容的 Python Skill/CLI 环境使用；PPT 与 fetch 的依赖仍由不同锁和 venv 隔离。
 
-打包脚本只获取登记版本与固定地址的制品，并逐一验证 SHA-256；已包含的资源可让首次 Python 环境准备离线完成。只有开发或不完整安装包缺少资产时，服务才回退到锁内的精确下载地址；损坏的内置文件不能被静默替换或执行。配置导入仍按自定义 stdio 处理；数据库迁移仅精确识别已知的三种 `npx -y @modelcontextprotocol/...` 和 `uvx mcp-server-fetch` 形状，其他命令不自动改写。
+GitHub MCP 以 stdio 子进程运行，每次 Run 都重新启动。由于官方本地 OAuth 令牌只保存在服务进程内存，BetterWork 配置要求用户把 `GITHUB_PERSONAL_ACCESS_TOKEN` 作为机密环境变量保存到已有受保护凭据存储，以便 Run 间复用。启动参数始终强制 `--read-only`；模型工具仍需逐项审阅、允许和选择。建议用户使用仅含目标仓库读取权限的 Fine-grained PAT。服务进程仍具有应用本地用户权限，`--read-only` 仅关闭 GitHub MCP 写工具，不构成 OS 沙箱或仓库访问边界。
+
+打包脚本只获取登记版本与固定地址的制品，并逐一验证 SHA-256；已包含的资源可让首次 Python 环境准备离线完成。只有开发或不完整安装包缺少资产时，服务才回退到锁内的精确下载地址；损坏的内置文件不能被静默替换或执行。配置导入仍按自定义 stdio 处理；数据库迁移仅精确识别已知的三种 `npx -y @modelcontextprotocol/...` 和 `uvx mcp-server-fetch` 形状，其他命令不自动改写。已有自定义 GitHub 命令也不会被迁移；用户可在设置中另建内置 GitHub 连接。
 
 内置并不等于启用或授权：迁移不继承旧 revision 的工具审阅；新连接默认停用。用户仍须检测目录、审阅工具合同，并明确启用/选择。子进程仍由 guardian 管理，权限是本机用户权限，不构成 OS 沙箱。
 

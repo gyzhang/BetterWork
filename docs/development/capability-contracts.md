@@ -95,7 +95,7 @@ type McpAuthentication =
     };
 type McpTransport =
   | {
-      kind: 'stdio'; runtime?: { kind: 'bundled'; serverId: 'filesystem' | 'memory' | 'sequential-thinking' | 'fetch' };
+      kind: 'stdio'; runtime?: { kind: 'bundled'; serverId: 'filesystem' | 'memory' | 'sequential-thinking' | 'fetch' | 'github' };
       command?: string; args: string[]; cwd?: string;
       env?: { name: string; value?: string; secret: boolean }[];
     }

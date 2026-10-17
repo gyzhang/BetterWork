@@ -64,6 +64,8 @@ ArtifactVersion 与 Evidence 的关系由 [ADR-0005](adr/0005-artifact-version-e
 
 `setup:runtime` 用于安装 Electron 二进制并对 `better-sqlite3` 做原生重建；首次克隆或切换 Node 版本后必须执行。
 
+在开发环境手动测试内置 GitHub MCP 前，先运行 `npm run github:mcp:prepare --workspace @betterwork/desktop`。它下载并校验已锁定的 GitHub 官方 macOS arm64 制品；`dist:mac` 会在打包时自动准备该资源。
+
 开发应用只能通过 `bash scripts/dev-start.sh` 启动；它会准确停止旧的 BetterWork 开发实例并写入 PID。停止使用 `bash scripts/dev-stop.sh`，日志在 `/tmp/betterwork-dev.log`。不要绕开脚本直接启动 Electron，也不要用宽泛的进程匹配方式杀掉用户的其他 Electron 应用。
 
 需要跳过内置 Skill/Expert 注册进行空白态开发验收时，运行 `npm run dev:start:empty`。该开关只对未打包的开发应用生效，不删除数据库已有记录。设置 → 运行中的「启用内置 Skill」与「启用内置专家」可分别控制内置资源；更改后立即自动保存，从列表隐藏对应项并阻止新 Run 使用，后续启动按设置跳过注册。关闭内置 Skill 时，引用内置 Skill 的内置专家也会隐藏并跳过注册。若重新开启但数据库中没有相应记录，重启应用后会按发布清单登记；两项设置默认开启。Skill 工具调用轮数有效输入停止后自动保存，离开输入框时提交；更改只影响新 Run。
