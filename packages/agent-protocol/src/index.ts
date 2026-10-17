@@ -4746,7 +4746,13 @@ export const runDiagnosticsIntegritySchema = z.enum(['complete', 'partial', 'una
 export const RUN_DIAGNOSTICS_PAGE_SIZE_DEFAULT = 50;
 export const RUN_DIAGNOSTICS_PAGE_SIZE_MAX = 200;
 export const RUN_DIAGNOSTIC_DETAIL_MAX_UTF8_BYTES = 65_536;
-export const runDiagnosticNodeKindSchema = z.enum(['round', 'model', 'tool']);
+export const runDiagnosticNodeKindSchema = z.enum(['round', 'model', 'tool', 'host']);
+export const runDiagnosticNodeSourceKindSchema = z.enum(['core-journal', 'host-diagnostic']);
+export const runDiagnosticHostKindSchema = z.enum(['run-host', 'skill-host']);
+export const runDiagnosticHostPhaseSchema = z.union([
+  runHostDiagnosticPhaseSchema,
+  skillHostDiagnosticPhaseSchema,
+]);
 export const runDiagnosticNodeStatusSchema = z.enum([
   'pending',
   'running',
@@ -4802,13 +4808,18 @@ export const runDiagnosticNodeSchema = z
     parentId: z.string().min(1).max(512).optional(),
     kind: runDiagnosticNodeKindSchema,
     status: runDiagnosticNodeStatusSchema,
-    sourceKind: z.literal('core-journal'),
+    sourceKind: runDiagnosticNodeSourceKindSchema,
     sourceId: z.string().min(1).max(512),
     sourceEventIds: z.array(z.string().min(1).max(512)).max(200).optional(),
     sourceSequenceStart: z.number().int().nonnegative().optional(),
     sourceSequenceEnd: z.number().int().nonnegative().optional(),
     evidenceState: runDiagnosticEvidenceStateSchema,
+    occurredAt: z.number().int().nonnegative().optional(),
     round: z.number().int().nonnegative().optional(),
+    operationId: z.string().min(1).max(512).optional(),
+    executionId: z.string().min(1).max(512).optional(),
+    hostKind: runDiagnosticHostKindSchema.optional(),
+    hostPhase: runDiagnosticHostPhaseSchema.optional(),
     modelCallId: z.string().min(1).max(512).optional(),
     toolCallId: z.string().min(1).max(512).optional(),
     toolName: z.string().max(256).optional(),
@@ -4827,13 +4838,27 @@ export type RunDiagnosticNode = z.infer<typeof runDiagnosticNodeSchema>;
 export const runDiagnosticsCursorSchema = z
   .object({
     runId: z.string().min(1),
-    source: z.literal('core-journal'),
+    source: runDiagnosticNodeSourceKindSchema,
+    afterAt: z.number().int().nonnegative(),
     afterSequence: z.number().int().nonnegative(),
     afterKind: runDiagnosticNodeKindSchema,
     afterNodeId: z.string().min(1).max(512),
   })
   .strict();
 export type RunDiagnosticsCursor = z.infer<typeof runDiagnosticsCursorSchema>;
+
+export const runDiagnosticsChangedEventSchema = z
+  .object({
+    runId: z.string().min(1).max(512),
+    cursor: z
+      .object({
+        source: z.literal('host-diagnostic'),
+        afterSequence: z.number().int().nonnegative(),
+      })
+      .strict(),
+  })
+  .strict();
+export type RunDiagnosticsChangedEvent = z.infer<typeof runDiagnosticsChangedEventSchema>;
 
 export const runDiagnosticsScopeRequestSchema = z
   .object({
@@ -6637,6 +6662,7 @@ export const IpcChannel = {
   ListRunEvents: 'run:list-events',
   ListRuns: 'run:list',
   RunEvent: 'run:event',
+  RunDiagnosticsChanged: 'run:diagnostics-changed',
   GetRunDiagnosticsSummary: 'run:diagnostics-summary',
   GetRunDiagnosticsSources: 'run:diagnostics-sources',
   ListRunDiagnosticsPage: 'run:diagnostics-page',
@@ -6809,6 +6835,7 @@ export interface BetterWorkDesktopApi {
       input: GetRunDiagnosticNodeDetailRequest,
     ): Promise<RunDiagnosticNodeDetail | null>;
     onEvent(listener: (event: AgentRuntimeEvent) => void): () => void;
+    onDiagnosticsChanged(listener: (event: RunDiagnosticsChangedEvent) => void): () => void;
   };
   runSettings: {
     get(): Promise<RunSettings>;

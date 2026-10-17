@@ -10,6 +10,11 @@ import { useState } from 'react';
 import { useRunDiagnosticNodeDetail } from '../../hooks/use-run-diagnostic-node-detail';
 import { useRunDiagnostics } from '../../hooks/use-run-diagnostics';
 import { runStatusName, toolStageLabel } from '../../lib/labels';
+import {
+  buildRunDiagnosticTree,
+  mergeRunDiagnosticNodes,
+  type RunDiagnosticTreeNode,
+} from '../../lib/run-diagnostics';
 import { AsyncButton, InlineLoading } from '../AsyncButton';
 import { Badge, type BadgeTone } from '../Badge';
 import { Button } from '../Button';
@@ -22,14 +27,7 @@ import { SectionHeader } from '../SectionHeader';
 import { StatusNote } from '../StatusNote';
 import { Tab, TabList, TabPanel, Tabs } from '../Tabs';
 
-type DetailsTab = 'chain' | 'usage' | 'sources';
-
-interface RoundGroup {
-  id: string;
-  round?: number;
-  sequence: number;
-  nodes: RunDiagnosticNode[];
-}
+type DetailsTab = 'chain' | 'timeline' | 'usage' | 'sources';
 
 const nodeStatusName: Record<RunDiagnosticNode['status'], string> = {
   pending: '待开始',
@@ -60,56 +58,32 @@ const runStatusTone: Record<RunDiagnosticsSummary['status'], BadgeTone> = {
   cancelled: 'warning',
 };
 
-const groupNodesByRound = (nodes: readonly RunDiagnosticNode[]): RoundGroup[] => {
-  const roundNumbers = new Map<string, number>();
-  for (const node of nodes) {
-    if (node.kind === 'round' && node.round !== undefined) roundNumbers.set(node.id, node.round);
-  }
-
-  const groups = new Map<string, RoundGroup>();
-  for (const node of nodes) {
-    const groupId =
-      node.kind === 'round' ? node.id : (node.parentId ?? `round:${node.round ?? 'unknown'}`);
-    const round =
-      node.kind === 'round'
-        ? node.round
-        : node.parentId
-          ? roundNumbers.get(node.parentId)
-          : node.round;
-    const current = groups.get(groupId);
-    if (current) {
-      if (node.kind !== 'round') current.nodes.push(node);
-      current.sequence = Math.min(
-        current.sequence,
-        node.sourceSequenceStart ?? Number.MAX_SAFE_INTEGER,
-      );
-      continue;
-    }
-    groups.set(groupId, {
-      id: groupId,
-      ...(round !== undefined ? { round } : {}),
-      sequence: node.sourceSequenceStart ?? Number.MAX_SAFE_INTEGER,
-      nodes: node.kind === 'round' ? [] : [node],
-    });
-  }
-
-  return [...groups.values()]
-    .map((group) => ({
-      ...group,
-      nodes: [...group.nodes].sort(
-        (left, right) =>
-          (left.sourceSequenceStart ?? Number.MAX_SAFE_INTEGER) -
-            (right.sourceSequenceStart ?? Number.MAX_SAFE_INTEGER) ||
-          left.id.localeCompare(right.id),
-      ),
-    }))
-    .sort((left, right) => {
-      if (left.round !== undefined && right.round !== undefined) return left.round - right.round;
-      if (left.round !== undefined) return -1;
-      if (right.round !== undefined) return 1;
-      return left.sequence - right.sequence || left.id.localeCompare(right.id);
-    });
+const hostPhaseName: Record<NonNullable<RunDiagnosticNode['hostPhase']>, string> = {
+  prepare: '准备',
+  audit: '审计',
+  'skill-cleanup': 'Skill 清理',
+  'mcp-cleanup': 'MCP 清理',
+  'artifact-commit': '成果提交',
+  dispatch: '派发',
+  execute: '执行',
+  validate: '校验',
+  publish: '登记成果',
+  cleanup: '收尾',
 };
+
+const nodeTitle = (node: RunDiagnosticNode, modelCallIndex: number): string => {
+  if (node.kind === 'round') {
+    return node.round === undefined ? '轮次未记录' : `第 ${node.round + 1} 轮`;
+  }
+  if (node.kind === 'model') return `模型调用 ${modelCallIndex}`;
+  if (node.kind === 'tool') return toolStageLabel(node.toolName);
+  const owner = node.hostKind === 'skill-host' ? 'Skill' : 'Run';
+  const phase = node.hostPhase ? hostPhaseName[node.hostPhase] : '阶段未记录';
+  return `${owner} · ${phase}`;
+};
+
+const flattenTree = (roots: readonly RunDiagnosticTreeNode[]): RunDiagnosticNode[] =>
+  roots.flatMap((entry) => [entry.node, ...flattenTree(entry.children)]);
 
 const runTone = (status: RunDiagnosticsSummary['status']): BadgeTone => runStatusTone[status];
 
@@ -195,15 +169,15 @@ export function RunExecutionDetails({
   const [requestedTool, setRequestedTool] = useState<{ runId: string; nodeId: string }>();
   const detailNodeId = requestedTool?.runId === scope.runId ? requestedTool.nodeId : undefined;
   const detail = useRunDiagnosticNodeDetail(scope, detailNodeId);
-  const groups = groupNodesByRound(diagnostics.nodes);
+  const tree = buildRunDiagnosticTree(diagnostics.nodes);
+  const treeNodes = flattenTree(tree);
+  const timelineNodes = mergeRunDiagnosticNodes([], diagnostics.nodes);
   const modelCallOrdinals = new Map<string, number>();
   let nextModelCallOrdinal = 1;
-  for (const group of groups) {
-    for (const node of group.nodes) {
-      if (node.kind === 'model') {
-        modelCallOrdinals.set(node.id, nextModelCallOrdinal);
-        nextModelCallOrdinal += 1;
-      }
+  for (const node of treeNodes) {
+    if (node.kind === 'model') {
+      modelCallOrdinals.set(node.id, nextModelCallOrdinal);
+      nextModelCallOrdinal += 1;
     }
   }
   const hasNoCalls =
@@ -237,6 +211,7 @@ export function RunExecutionDetails({
       <Tabs value={tab} onChange={setTab}>
         <TabList label="执行详情类别" size="sm">
           <Tab value="chain">执行链</Tab>
+          <Tab value="timeline">时间轴</Tab>
           <Tab value="sources">工作依据</Tab>
           <Tab value="usage">用量与状态</Tab>
         </TabList>
@@ -264,32 +239,29 @@ export function RunExecutionDetails({
             {diagnostics.summary && hasNoCalls && diagnostics.summary.integrity === 'complete' && (
               <EmptyNotice title="暂无模型或工具调用" />
             )}
-            {diagnostics.summary &&
-              !hasNoCalls &&
-              groups.map((group) => (
-                <section className="run-execution-round" key={group.id}>
-                  <SectionHeader
-                    variant="panel"
-                    title={group.round === undefined ? '轮次未记录' : `第 ${group.round + 1} 轮`}
-                    hint={`模型 ${group.nodes.filter((node) => node.kind === 'model').length} 次 · 工具 ${group.nodes.filter((node) => node.kind === 'tool').length} 次`}
+            {diagnostics.summary && !hasNoCalls && (
+              <ul className="run-execution-node-list">
+                {tree.map((entry) => (
+                  <DiagnosticTreeEntry
+                    key={entry.node.id}
+                    entry={entry}
+                    modelCallOrdinals={modelCallOrdinals}
+                    detailNodeId={detailNodeId}
+                    detail={detail}
+                    onLoadTool={(nodeId) => setRequestedTool({ runId: scope.runId, nodeId })}
                   />
-                  <ul className="run-execution-node-list">
-                    {group.nodes.map((node) => (
-                      <li key={node.id}>
-                        <DiagnosticNodeRow
-                          node={node}
-                          modelCallIndex={modelCallOrdinals.get(node.id) ?? 0}
-                          detailNodeId={detailNodeId}
-                          detail={detail}
-                          onLoadDetail={() => {
-                            setRequestedTool({ runId: scope.runId, nodeId: node.id });
-                          }}
-                        />
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-              ))}
+                ))}
+              </ul>
+            )}
+          </TabPanel>
+          <TabPanel value="timeline" className="run-execution-details-panel">
+            {diagnostics.error && (
+              <InlineError message={diagnostics.error} onRetry={diagnostics.refresh} />
+            )}
+            {diagnostics.loading && <InlineLoading label="正在读取执行时间轴…" />}
+            {diagnostics.summary && (
+              <Timeline nodes={timelineNodes} modelCallOrdinals={modelCallOrdinals} />
+            )}
           </TabPanel>
           <TabPanel value="usage" className="run-execution-details-panel">
             {diagnostics.error && (
@@ -585,6 +557,164 @@ function SourceFacts({ sources }: { sources: RunDiagnosticsSources }): React.JSX
   );
 }
 
+function DiagnosticTreeEntry({
+  entry,
+  modelCallOrdinals,
+  detailNodeId,
+  detail,
+  onLoadTool,
+}: {
+  entry: RunDiagnosticTreeNode;
+  modelCallOrdinals: ReadonlyMap<string, number>;
+  detailNodeId: string | undefined;
+  detail: ReturnType<typeof useRunDiagnosticNodeDetail>;
+  onLoadTool: (nodeId: string) => void;
+}): React.JSX.Element {
+  const { node, children, unresolvedParent } = entry;
+  return (
+    <li
+      className="run-execution-tree-entry"
+      tabIndex={0}
+      aria-label={`${nodeTitle(node, modelCallOrdinals.get(node.id) ?? 0)} · ${nodeStatusName[node.status]}`}
+    >
+      {unresolvedParent && (
+        <p className="run-execution-node-fact">父节点未记录或无法关联，本节点仍按独立记录显示。</p>
+      )}
+      <DiagnosticNodeRow
+        node={node}
+        modelCallIndex={modelCallOrdinals.get(node.id) ?? 0}
+        detailNodeId={detailNodeId}
+        detail={detail}
+        onLoadDetail={() => onLoadTool(node.id)}
+      />
+      {children.length > 0 && (
+        <ul className="run-execution-node-list run-execution-node-list--nested">
+          {children.map((child) => (
+            <DiagnosticTreeEntry
+              key={child.node.id}
+              entry={child}
+              modelCallOrdinals={modelCallOrdinals}
+              detailNodeId={detailNodeId}
+              detail={detail}
+              onLoadTool={onLoadTool}
+            />
+          ))}
+        </ul>
+      )}
+    </li>
+  );
+}
+
+const formatTimelineTime = (value: number): string => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return `时间值异常（${String(value)}）`;
+  return date.toLocaleTimeString(undefined, {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+};
+
+function Timeline({
+  nodes,
+  modelCallOrdinals,
+}: {
+  nodes: readonly RunDiagnosticNode[];
+  modelCallOrdinals: ReadonlyMap<string, number>;
+}): React.JSX.Element {
+  const knownTimes = nodes.flatMap((node) =>
+    [node.occurredAt, node.endedAt].filter((value): value is number => value !== undefined),
+  );
+  const minimum = knownTimes.length > 0 ? Math.min(...knownTimes) : undefined;
+  const maximum = knownTimes.length > 0 ? Math.max(...knownTimes) : undefined;
+  const span = minimum === undefined || maximum === undefined ? 1 : Math.max(1, maximum - minimum);
+
+  return (
+    <div className="run-diagnostic-timeline">
+      <p className="run-execution-node-fact">
+        时间轴按已记录的本机时间展示；单调时钟测得的阶段耗时单独标注，不汇总子节点耗时。
+      </p>
+      {nodes.length === 0 ? (
+        <EmptyNotice title="暂无可显示的执行节点" />
+      ) : (
+        <ol className="run-diagnostic-timeline-list">
+          {nodes.map((node) => {
+            const anchor = node.startedAt ?? node.occurredAt;
+            const end = node.endedAt;
+            const hasTime = anchor !== undefined;
+            const invalidInterval =
+              node.startedAt !== undefined && end !== undefined && end < node.startedAt;
+            const left =
+              hasTime && minimum !== undefined
+                ? Math.max(0, Math.min(100, ((anchor - minimum) / span) * 100))
+                : 0;
+            const width =
+              hasTime && end !== undefined && !invalidInterval
+                ? Math.max(0.7, Math.min(100 - left, ((end - anchor) / span) * 100))
+                : 0.7;
+            const positionText = !hasTime
+              ? '时间未记录'
+              : node.startedAt === undefined
+                ? `首次记录 ${formatTimelineTime(anchor)}`
+                : `开始 ${formatTimelineTime(node.startedAt)}`;
+            const endText = end === undefined ? undefined : `结束 ${formatTimelineTime(end)}`;
+            const intervalText = invalidInterval
+              ? '时间区间异常：结束早于开始'
+              : node.status === 'running' && end === undefined
+                ? '运行中占位；结束时间未记录'
+                : undefined;
+            const monotonicText =
+              node.durationMs === undefined ? undefined : `单调耗时 ${node.durationMs} ms`;
+            const processText =
+              node.kind === 'host' && node.hostKind === 'skill-host' && node.hostPhase === 'execute'
+                ? '子进程内部阶段未记录'
+                : undefined;
+            const accessibleText = [
+              nodeTitle(node, modelCallOrdinals.get(node.id) ?? 0),
+              nodeStatusName[node.status],
+              positionText,
+              endText,
+              monotonicText,
+              intervalText,
+              processText,
+            ]
+              .filter((value) => value !== undefined)
+              .join('；');
+
+            return (
+              <li
+                key={node.id}
+                className="run-diagnostic-timeline-item"
+                tabIndex={0}
+                aria-label={accessibleText}
+              >
+                <ListRow
+                  variant="card"
+                  multiline={true}
+                  title={nodeTitle(node, modelCallOrdinals.get(node.id) ?? 0)}
+                  detail={accessibleText}
+                  trailing={
+                    <Badge tone={nodeStatusTone[node.status]}>{nodeStatusName[node.status]}</Badge>
+                  }
+                >
+                  <div className="run-diagnostic-timeline-track" aria-hidden="true">
+                    {hasTime && !invalidInterval && (
+                      <span
+                        className={`run-diagnostic-timeline-bar run-diagnostic-timeline-bar--${node.status}`}
+                        style={{ left: `${left}%`, width: `${width}%` }}
+                      />
+                    )}
+                  </div>
+                </ListRow>
+              </li>
+            );
+          })}
+        </ol>
+      )}
+    </div>
+  );
+}
+
 function DiagnosticNodeRow({
   node,
   modelCallIndex,
@@ -599,11 +729,11 @@ function DiagnosticNodeRow({
   onLoadDetail: () => void;
 }): React.JSX.Element {
   const isTool = node.kind === 'tool';
-  const title = isTool ? toolStageLabel(node.toolName) : `模型调用 ${modelCallIndex}`;
+  const title = nodeTitle(node, modelCallIndex);
   const detailLabel = isTool ? executionStateLabel(node) : undefined;
   const meta = [
     nodeStatusName[node.status],
-    node.durationMs !== undefined ? `总耗时 ${node.durationMs} ms` : undefined,
+    node.durationMs !== undefined ? `单调耗时 ${node.durationMs} ms` : undefined,
   ]
     .filter((value) => value !== undefined)
     .join(' · ');
@@ -614,11 +744,19 @@ function DiagnosticNodeRow({
       multiline={true}
       title={title}
       detail={
-        isTool
-          ? `${detailLabel ?? '执行情况未记录'}${node.toolName ? ` · ${node.toolName}` : ''}`
-          : node.finishReason
-            ? `结束原因：${node.finishReason}`
-            : undefined
+        node.kind === 'round'
+          ? node.round === undefined
+            ? '轮次标识未记录'
+            : `模型与工具调用的轮次 ${node.round + 1}`
+          : isTool
+            ? `${detailLabel ?? '执行情况未记录'}${node.toolName ? ` · ${node.toolName}` : ''}`
+            : node.kind === 'host'
+              ? [node.operationId, node.toolCallId, node.executionId]
+                  .filter((value) => value !== undefined)
+                  .join(' · ')
+              : node.finishReason
+                ? `结束原因：${node.finishReason}`
+                : undefined
       }
       meta={meta}
       trailing={<Badge tone={nodeStatusTone[node.status]}>{nodeStatusName[node.status]}</Badge>}

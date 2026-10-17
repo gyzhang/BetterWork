@@ -87,6 +87,7 @@ const invoke = async (channel: string, raw: unknown): Promise<unknown> => {
 /** 推送通道由主进程主动 send，不经 ipcMain.handle 注册。 */
 const PUSH_ONLY_CHANNELS = new Set<string>([
   IpcChannel.RunEvent,
+  IpcChannel.RunDiagnosticsChanged,
   IpcChannel.NotificationChangeEvent,
   IpcChannel.NotificationActivated,
   IpcChannel.KnowledgeJobEvent,
@@ -1366,6 +1367,7 @@ describe('registerIpc', () => {
         cursor: {
           runId: 'other-run',
           source: 'core-journal',
+          afterAt: 1,
           afterSequence: 1,
           afterKind: 'tool',
           afterNodeId: 'tool:ipc-tool-a',

@@ -10,6 +10,7 @@ import type {
   FileArtifactDetail,
   OpenFileArtifactResult,
   OpenKnowledgeSourceResult,
+  RunDiagnosticsChangedEvent,
 } from '@betterwork/agent-protocol';
 import {
   agentRuntimeEventSchema,
@@ -193,6 +194,7 @@ import {
   revokeSkillTrustRequestSchema,
   runArtifactSourceDeclarationSchema,
   runDiagnosticNodeDetailResponseSchema,
+  runDiagnosticsChangedEventSchema,
   runDiagnosticsPageResponseSchema,
   runDiagnosticsSourcesResponseSchema,
   runDiagnosticsSummaryResponseSchema,
@@ -501,6 +503,17 @@ const runEventContracts = defineEventContracts({
 const runEventMethods: EventMethodsByChannel<typeof runEventContracts> = {
   [IpcChannel.RunEvent]: (listener) =>
     listenContract(runEventContracts[IpcChannel.RunEvent], listener),
+};
+
+const runDiagnosticsChangedContracts = defineEventContracts({
+  [IpcChannel.RunDiagnosticsChanged]: {
+    channel: IpcChannel.RunDiagnosticsChanged,
+    event: runDiagnosticsChangedEventSchema,
+  },
+});
+const runDiagnosticsChangedMethods: EventMethodsByChannel<typeof runDiagnosticsChangedContracts> = {
+  [IpcChannel.RunDiagnosticsChanged]: (listener) =>
+    listenContract(runDiagnosticsChangedContracts[IpcChannel.RunDiagnosticsChanged], listener),
 };
 
 const workspaceTaskInvokeMethods: InvokeMethodsByChannel<typeof workspaceTaskInvokeContracts> = {
@@ -1749,6 +1762,8 @@ const api: BetterWorkDesktopApi = {
     getDiagnosticNodeDetail: (input) =>
       runInvokeMethods[IpcChannel.GetRunDiagnosticNodeDetail](input),
     onEvent: (listener) => runEventMethods[IpcChannel.RunEvent](listener),
+    onDiagnosticsChanged: (listener: (event: RunDiagnosticsChangedEvent) => void) =>
+      runDiagnosticsChangedMethods[IpcChannel.RunDiagnosticsChanged](listener),
   },
   runSettings: {
     get: () => runInvokeMethods[IpcChannel.GetRunSettings]({}),

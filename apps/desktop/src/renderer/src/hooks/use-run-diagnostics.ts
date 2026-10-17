@@ -2,6 +2,7 @@ import {
   type AgentRuntimeEvent,
   RUN_DIAGNOSTICS_PAGE_SIZE_MAX,
   type RunDiagnosticNode,
+  type RunDiagnosticsChangedEvent,
   type RunDiagnosticsCursor,
   type RunDiagnosticsScopeRequest,
   type RunDiagnosticsSources,
@@ -61,6 +62,7 @@ export function useRunDiagnostics(scope?: RunDiagnosticsScopeRequest): RunDiagno
     let eventSyncBusy = false;
     let eventSyncPending = false;
     let liveEvents: AgentRuntimeEvent[] = [];
+    let lastHostDiagnosticSequence = -1;
     const eventIds = new Set<string>();
     const isCurrent = (): boolean => active && requestIdRef.current === requestId;
 
@@ -186,6 +188,14 @@ export function useRunDiagnostics(scope?: RunDiagnosticsScopeRequest): RunDiagno
       if (isRunDiagnosticsRelevantEvent(event)) startRefresh();
       if (hasRunEventSequenceGap(liveEvents)) syncEventGap();
     });
+    const unsubscribeDiagnostics = window.betterwork.runs.onDiagnosticsChanged(
+      (event: RunDiagnosticsChangedEvent) => {
+        if (!isCurrent() || event.runId !== runId) return;
+        if (event.cursor.afterSequence <= lastHostDiagnosticSequence) return;
+        lastHostDiagnosticSequence = event.cursor.afterSequence;
+        startRefresh();
+      },
+    );
 
     const retry = (): void => {
       startRefresh();
@@ -199,6 +209,7 @@ export function useRunDiagnostics(scope?: RunDiagnosticsScopeRequest): RunDiagno
       active = false;
       if (requestIdRef.current === requestId) refreshRef.current = () => undefined;
       unsubscribe();
+      unsubscribeDiagnostics();
     };
   }, [runId, taskId, workspaceId]);
 

@@ -83,6 +83,7 @@ HostDiagnosticEvent 最小字段：id、runId、operationId、diagnosticSequence
 
 - summary：Run/Task/Session、持久终态、起止、调用/拒绝计数、已知用量及缺失调用数、recordingVersion/完整性。
 - node：独立节点 ID、显式父关系、类型、状态、实际执行与否、事件时间、可用耗时、可选 round/model/tool/execution 关联。不把两个来源序列拼成一个递增序列。
+- 双来源页面将 Core 与 Host 事件分别按各自来源序号投影；Host operation 的 start/terminal 合成一个可回看的阶段节点。因果树只按 parentOperationId、toolCallId 等已记录关联连接，缺失父节点保留为独立节点并说明关系缺失。全局分页按已记录 wall-clock 事件时间、来源固定顺序、该来源序号与节点 ID 建立稳定复合游标；不能把 Core sequence 与 diagnosticSequence 相加或比较成执行先后。
 - sources：引用当时固定的 ExpertRevision、Skill/环境绑定、model snapshot、材料读取、记忆修订/派发审计、连续上下文、ArtifactVersion；无法取得时给原因，不查询 latest 代替历史。
 - `run:diagnostics-sources` 使用 Run/Task/Workspace 同一范围请求与严格响应 Schema。固定上下文只投影精确修订 ID、版本号、状态和必要的模型显示名/指纹；Skill 环境只含状态、平台、lock hash 与依赖清单 hash。已选材料和读取足迹分开列出，只有 `read/parse` 可令 `wasRead=true`，`preview/search` 不能推断正文已采用。Knowledge/Artifact 通过精确 revision/version ID 读取元数据；输入快照核对 Workspace、hash、format 和 fileKey 绑定，但响应不含路径/fileKey/locator。
 - 记忆只回传选择身份/hash、读取身份与来源状态、重放身份及阶段时间；连续上下文只回传修订/hash/时间、省略原因和同 Task 的来源 Run/ArtifactVersion ID，不回传简报正文。成果只回传版本身份/hash、类型/校验元数据与已登记的精确输入关系，不回传标题、内容、Evidence 摘录或文件定位符。`dispatch-attempted` 只表示本地记录了派发尝试，不代表 Provider 服务端已收到。
@@ -94,7 +95,7 @@ IPC channel 只在有实际 Main/Preload/Hook 消费者的卡中注册。Host �
 
 ## 7. 时间轴、统计与比较
 
-时间轴只展示已记录起止与正在运行的占位；单调 duration 与 wall-clock 区间含义分开。主进程/子进程未同步时钟不支持精确关键路径推断；并发节点耗时不得直接相加当总时长。数据异常或零长度区间有明确降级，不生成负宽度。
+时间轴只展示已记录起止与正在运行的占位；单调 duration 与 wall-clock 区间含义分开。并列时间按来源与原序号稳定排序，不推断因果。主进程/子进程未同步时钟不支持精确关键路径推断；并发节点耗时不得直接相加当总时长。子进程内部未埋点阶段显示未记录。数据异常或零长度区间有明确降级，不生成负宽度；每个图形区间均有键盘可聚焦的文本替代。
 
 统计范围固定 Workspace，可选 Task、时间窗、精确 ExpertRevision、SkillRevision、模型快照指纹；缺少历史版本时归入“未记录”，不混入当前版本。分页与统计使用相同筛选条件，返回样本数和纳入/排除计数。
 

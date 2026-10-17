@@ -5,6 +5,7 @@ import path from 'node:path';
 import {
   IpcChannel,
   type KnowledgeJobSummary,
+  runDiagnosticsChangedEventSchema,
   type ScheduleChangedEvent,
   scheduleChangedEventSchema,
 } from '@betterwork/agent-protocol';
@@ -546,6 +547,14 @@ function bootstrap(initiallySuspended: boolean): ApplicationContext {
   const runHostDiagnosticRecorder = new RunHostDiagnosticRecorder(store.runHostDiagnostics, {
     wallNow: () => Date.now(),
     monotonicNow: () => performance.now(),
+    onRecorded: (event) =>
+      getWindow()?.webContents.send(
+        IpcChannel.RunDiagnosticsChanged,
+        runDiagnosticsChangedEventSchema.parse({
+          runId: event.runId,
+          cursor: { source: 'host-diagnostic', afterSequence: event.diagnosticSequence },
+        }),
+      ),
   });
   const skillExecutionService = new SkillExecutionService(
     store,

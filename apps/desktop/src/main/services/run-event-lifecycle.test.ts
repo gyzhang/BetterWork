@@ -1,7 +1,11 @@
 import { randomUUID } from 'node:crypto';
 
 import { abortError } from '@betterwork/agent-core';
-import { type AgentRuntimeEvent, agentRuntimeEventSchema } from '@betterwork/agent-protocol';
+import {
+  type AgentRuntimeEvent,
+  agentRuntimeEventSchema,
+  runDiagnosticsChangedEventSchema,
+} from '@betterwork/agent-protocol';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { AppStore } from '../persistence';
@@ -116,6 +120,41 @@ const setup = (
 const types = (events: AgentRuntimeEvent[]): string[] => events.map((event) => event.type);
 
 describe('RunEventLifecycle', () => {
+  it('publishes only the Run and host diagnostic cursor after a durable append', () => {
+    const { store, runId } = setup();
+    const changes: unknown[] = [];
+    let clock = 1;
+    const recorder = new RunHostDiagnosticRecorder(store.runHostDiagnostics, {
+      wallNow: () => clock++,
+      monotonicNow: () => clock++,
+      onRecorded: (event) =>
+        changes.push(
+          runDiagnosticsChangedEventSchema.parse({
+            runId: event.runId,
+            cursor: { source: 'host-diagnostic', afterSequence: event.diagnosticSequence },
+          }),
+        ),
+    });
+    const started = recorder.start({
+      runId,
+      operationId: 'push-operation',
+      kind: 'run-host',
+      phase: 'prepare',
+    });
+    recorder.finish(started, { state: 'completed' });
+
+    expect(changes).toEqual([
+      {
+        runId,
+        cursor: { source: 'host-diagnostic', afterSequence: 0 },
+      },
+      {
+        runId,
+        cursor: { source: 'host-diagnostic', afterSequence: 1 },
+      },
+    ]);
+  });
+
   it('defers completed persistence and artifacts until Skill and MCP cleanup both finish', async () => {
     const skillEntered = gate();
     const skillDone = gate();

@@ -57,6 +57,9 @@ import {
   resolveMemoryConflictRequestSchema,
   resultSchema,
   retryScheduleOutputRequestSchema,
+  runDiagnosticNodeSchema,
+  runDiagnosticsChangedEventSchema,
+  runDiagnosticsCursorSchema,
   runDiagnosticsSourcesSchema,
   runMaterialReadSchema,
   runMemoryContextSchema,
@@ -2644,4 +2647,48 @@ it('validates strict host diagnostic event variants and rejects unbounded data',
       phase: 'dispatch',
     }).success,
   ).toBe(true);
+});
+
+describe('dual-source run diagnostics protocol', () => {
+  it('supports a source-aware host node, stable merged cursor, and payload-free invalidation', () => {
+    const node = {
+      id: 'host:operation-1',
+      parentId: 'tool:tool-1',
+      kind: 'host',
+      status: 'running',
+      sourceKind: 'host-diagnostic',
+      sourceId: 'operation-1',
+      sourceEventIds: ['host-event-1'],
+      sourceSequenceStart: 1,
+      evidenceState: 'recorded',
+      occurredAt: 100,
+      operationId: 'operation-1',
+      hostKind: 'skill-host',
+      hostPhase: 'execute',
+    } as const;
+    const cursor = {
+      runId: 'run-1',
+      source: 'host-diagnostic',
+      afterAt: 100,
+      afterSequence: 1,
+      afterKind: 'host',
+      afterNodeId: 'host:operation-1',
+    } as const;
+
+    expect(runDiagnosticNodeSchema.safeParse(node).success).toBe(true);
+    expect(runDiagnosticsCursorSchema.safeParse(cursor).success).toBe(true);
+    expect(
+      runDiagnosticsChangedEventSchema.safeParse({
+        runId: 'run-1',
+        cursor: { source: 'host-diagnostic', afterSequence: 1 },
+      }).success,
+    ).toBe(true);
+    expect(
+      runDiagnosticsChangedEventSchema.safeParse({
+        runId: 'run-1',
+        cursor: { source: 'host-diagnostic', afterSequence: 1 },
+        event: { stdout: 'must not be broadcast' },
+      }).success,
+    ).toBe(false);
+  });
 });

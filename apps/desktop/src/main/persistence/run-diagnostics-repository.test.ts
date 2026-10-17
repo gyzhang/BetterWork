@@ -1,4 +1,8 @@
-import type { AgentRuntimeEvent, RunDiagnosticsRecording } from '@betterwork/agent-protocol';
+import type {
+  AgentRuntimeEvent,
+  RunDiagnosticsCursor,
+  RunDiagnosticsRecording,
+} from '@betterwork/agent-protocol';
 import { agentRuntimeEventSchema } from '@betterwork/agent-protocol';
 import type Database from 'better-sqlite3';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -46,6 +50,125 @@ const event = (
   });
 
 describe('RunDiagnosticsRepository', () => {
+  it('projects HostDiagnosticEvent with its own sequence and explicit cross-source parents', () => {
+    const store = openStore();
+    const runId = 'host-tree';
+    seedRun(store, runId, { version: 2, sections: ['core', 'host'] });
+    store.runs.appendEvent(
+      event(runId, 0, {
+        type: 'tool.started',
+        toolCall: { id: 'skill-tool', name: 'skill_execute', input: {} },
+      }),
+    );
+    const appendHost = (input: Parameters<typeof store.runHostDiagnostics.append>[0]): void => {
+      store.runHostDiagnostics.append(input);
+    };
+    appendHost({
+      id: 'prepare-start',
+      runId,
+      operationId: 'prepare-op',
+      kind: 'run-host',
+      phase: 'prepare',
+      state: 'started',
+      createdAt: 100,
+    });
+    appendHost({
+      id: 'prepare-finish',
+      runId,
+      operationId: 'prepare-op',
+      kind: 'run-host',
+      phase: 'prepare',
+      state: 'completed',
+      createdAt: 110,
+      durationMs: 10,
+    });
+    appendHost({
+      id: 'dispatch-start',
+      runId,
+      operationId: 'dispatch-op',
+      toolCallId: 'skill-tool',
+      kind: 'skill-host',
+      phase: 'dispatch',
+      state: 'started',
+      createdAt: 100,
+    });
+    appendHost({
+      id: 'dispatch-finish',
+      runId,
+      operationId: 'dispatch-op',
+      toolCallId: 'skill-tool',
+      kind: 'skill-host',
+      phase: 'dispatch',
+      state: 'completed',
+      createdAt: 120,
+      durationMs: 20,
+    });
+    appendHost({
+      id: 'execute-start',
+      runId,
+      operationId: 'execute-op',
+      parentOperationId: 'dispatch-op',
+      toolCallId: 'skill-tool',
+      kind: 'skill-host',
+      phase: 'execute',
+      state: 'started',
+      createdAt: 110,
+    });
+    appendHost({
+      id: 'execute-finish',
+      runId,
+      operationId: 'execute-op',
+      parentOperationId: 'dispatch-op',
+      toolCallId: 'skill-tool',
+      kind: 'skill-host',
+      phase: 'execute',
+      state: 'completed',
+      createdAt: 115,
+      durationMs: 5,
+    });
+
+    const nodes = store.runDiagnostics.getPage({ runId })?.nodes ?? [];
+    expect(nodes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'host:dispatch-op',
+          sourceKind: 'host-diagnostic',
+          sourceSequenceStart: 2,
+          parentId: 'tool:skill-tool',
+          operationId: 'dispatch-op',
+          occurredAt: 100,
+        }),
+        expect.objectContaining({
+          id: 'host:execute-op',
+          sourceSequenceStart: 4,
+          parentId: 'host:dispatch-op',
+          durationMs: 5,
+        }),
+      ]),
+    );
+    expect(nodes.find((node) => node.id === 'tool:skill-tool')).toMatchObject({
+      sourceKind: 'core-journal',
+      sourceSequenceStart: 0,
+      occurredAt: 100,
+    });
+    expect(store.runDiagnostics.getSummary(runId)?.integrity).toBe('partial');
+
+    const pagedIds: string[] = [];
+    let cursor: RunDiagnosticsCursor | undefined;
+    do {
+      const page = store.runDiagnostics.getPage({
+        runId,
+        pageSize: 2,
+        ...(cursor ? { cursor } : {}),
+      });
+      if (!page) break;
+      pagedIds.push(...page.nodes.map((node) => node.id));
+      cursor = page.nextCursor;
+    } while (cursor);
+    expect(pagedIds).toEqual(nodes.map((node) => node.id));
+    expect(new Set(pagedIds).size).toBe(nodes.length);
+  });
+
   it('projects model/tool events in stable pages and keeps unknown usage separate from real zero', () => {
     const store = openStore();
     const taskId = seedRun(store, 'trace', { version: 1, sections: ['core'] });

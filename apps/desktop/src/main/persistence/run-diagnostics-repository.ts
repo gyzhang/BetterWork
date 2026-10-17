@@ -1,5 +1,6 @@
 import type {
   AgentRuntimeEvent,
+  HostDiagnosticEvent,
   RunDiagnosticNode,
   RunDiagnosticNodeDetail,
   RunDiagnosticsCursor,
@@ -11,6 +12,7 @@ import type {
 } from '@betterwork/agent-protocol';
 import {
   agentRuntimeEventSchema,
+  hostDiagnosticEventSchema,
   RUN_DIAGNOSTIC_DETAIL_MAX_UTF8_BYTES,
   runDiagnosticNodeDetailSchema,
   runDiagnosticNodeSchema,
@@ -38,6 +40,23 @@ interface StoredCoreEventRow {
   sequence: number;
   type: string;
   payload: string;
+  created_at: number;
+}
+
+interface StoredHostDiagnosticEventRow {
+  id: string;
+  run_id: string;
+  operation_id: string;
+  parent_operation_id: string | null;
+  diagnostic_sequence: number;
+  kind: HostDiagnosticEvent['kind'];
+  phase: HostDiagnosticEvent['phase'];
+  state: HostDiagnosticEvent['state'];
+  tool_call_id: string | null;
+  execution_id: string | null;
+  duration_ms: number | null;
+  error_code: HostDiagnosticEvent['errorCode'] | null;
+  metadata_json: string | null;
   created_at: number;
 }
 
@@ -234,13 +253,26 @@ const usageMetric = (
 const nodeOrder = (node: Pick<RunDiagnosticNode, 'kind'>): number => {
   if (node.kind === 'round') return 0;
   if (node.kind === 'model') return 1;
-  return 2;
+  if (node.kind === 'tool') return 2;
+  return 3;
 };
 
 const compareNodePosition = (
-  left: Pick<RunDiagnosticNode, 'kind' | 'id' | 'sourceSequenceStart'>,
-  right: Pick<RunDiagnosticNode, 'kind' | 'id' | 'sourceSequenceStart'>,
+  left: Pick<
+    RunDiagnosticNode,
+    'kind' | 'id' | 'sourceKind' | 'sourceSequenceStart' | 'occurredAt'
+  >,
+  right: Pick<
+    RunDiagnosticNode,
+    'kind' | 'id' | 'sourceKind' | 'sourceSequenceStart' | 'occurredAt'
+  >,
 ): number => {
+  const timeDifference =
+    (left.occurredAt ?? Number.MAX_SAFE_INTEGER) - (right.occurredAt ?? Number.MAX_SAFE_INTEGER);
+  if (timeDifference !== 0) return timeDifference;
+  const sourceDifference =
+    (left.sourceKind === 'core-journal' ? 0 : 1) - (right.sourceKind === 'core-journal' ? 0 : 1);
+  if (sourceDifference !== 0) return sourceDifference;
   const sequenceDifference =
     (left.sourceSequenceStart ?? Number.MAX_SAFE_INTEGER) -
     (right.sourceSequenceStart ?? Number.MAX_SAFE_INTEGER);
@@ -265,6 +297,42 @@ const terminalStatus = (
   if (event.type === 'run.failed') return 'failed';
   return 'cancelled';
 };
+
+const hostTerminalStatus = (event: HostDiagnosticEvent): RunDiagnosticNode['status'] => {
+  if (event.state === 'completed') return 'completed';
+  if (event.state === 'failed') return 'failed';
+  if (event.state === 'cancelled') return 'cancelled';
+  if (event.state === 'interrupted') return 'interrupted';
+  return 'unknown';
+};
+
+const hostEventFromRow = (row: StoredHostDiagnosticEventRow): HostDiagnosticEvent => {
+  const metadata: unknown =
+    row.metadata_json === null ? undefined : (JSON.parse(row.metadata_json) as unknown);
+  return hostDiagnosticEventSchema.parse({
+    id: row.id,
+    runId: row.run_id,
+    operationId: row.operation_id,
+    ...(row.parent_operation_id === null ? {} : { parentOperationId: row.parent_operation_id }),
+    diagnosticSequence: row.diagnostic_sequence,
+    kind: row.kind,
+    phase: row.phase,
+    state: row.state,
+    ...(row.tool_call_id === null ? {} : { toolCallId: row.tool_call_id }),
+    ...(row.execution_id === null ? {} : { executionId: row.execution_id }),
+    ...(row.duration_ms === null ? {} : { durationMs: row.duration_ms }),
+    ...(row.error_code === null ? {} : { errorCode: row.error_code }),
+    ...(metadata === undefined ? {} : { metadata }),
+    createdAt: row.created_at,
+  });
+};
+
+const sameHostContext = (left: HostDiagnosticEvent, right: HostDiagnosticEvent): boolean =>
+  left.kind === right.kind &&
+  left.phase === right.phase &&
+  left.parentOperationId === right.parentOperationId &&
+  left.toolCallId === right.toolCallId &&
+  left.executionId === right.executionId;
 
 const coreEventQuerySql = `SELECT id, run_id, sequence, type, payload, created_at
   FROM run_events WHERE run_id = ? AND type IN (${eventTypeSql(DIAGNOSTIC_EVENT_TYPES)})
@@ -303,7 +371,9 @@ export class RunDiagnosticsRepository {
         compareNodePosition(node, {
           id: cursor.afterNodeId,
           kind: cursor.afterKind,
+          sourceKind: cursor.source,
           sourceSequenceStart: cursor.afterSequence,
+          occurredAt: cursor.afterAt,
         }) > 0
       );
     });
@@ -313,7 +383,8 @@ export class RunDiagnosticsRepository {
       last && remaining.length > nodes.length
         ? {
             runId: query.runId,
-            source: 'core-journal',
+            source: last.sourceKind,
+            afterAt: last.occurredAt ?? Number.MAX_SAFE_INTEGER,
             afterSequence: last.sourceSequenceStart ?? 0,
             afterKind: last.kind,
             afterNodeId: last.id,
@@ -440,6 +511,22 @@ export class RunDiagnosticsRepository {
       }
 
       const expectCore = recording?.sections.includes('core') ?? false;
+      const hostEvents: HostDiagnosticEvent[] = [];
+      const hostRows = this.db
+        .prepare(
+          `SELECT id, run_id, operation_id, parent_operation_id, diagnostic_sequence,
+                  kind, phase, state, tool_call_id, execution_id, duration_ms,
+                  error_code, metadata_json, created_at
+           FROM run_diagnostic_events WHERE run_id = ? ORDER BY diagnostic_sequence ASC`,
+        )
+        .all(runId) as StoredHostDiagnosticEventRow[];
+      for (const row of hostRows) {
+        try {
+          hostEvents.push(hostEventFromRow(row));
+        } catch {
+          hasMalformedEvent = true;
+        }
+      }
       const modelGroups = groupModelEvents(events);
       const toolGroups = groupToolEvents(events);
       const modelNodes: RunDiagnosticNode[] = [];
@@ -484,6 +571,7 @@ export class RunDiagnosticsRepository {
             start && group.started.length === 1 && ending && group.ended.length === 1
               ? 'recorded'
               : 'missing',
+          occurredAt: Math.min(...group.events.map((item) => item.createdAt)),
           ...(round === undefined ? {} : { round }),
           ...(start ? { startedAt: start.createdAt } : {}),
           ...(ending ? { endedAt: ending.createdAt, durationMs: ending.durationMs } : {}),
@@ -578,6 +666,7 @@ export class RunDiagnosticsRepository {
           sourceSequenceStart: startSequence,
           sourceSequenceEnd: sequenceEnd(sourceEvents),
           evidenceState: duplicateOrAmbiguous || (!start && !outcome) ? 'missing' : 'recorded',
+          occurredAt: Math.min(...sourceEvents.map((item) => item.createdAt)),
           ...(round === undefined ? {} : { round }),
           ...(modelCallId === undefined ? {} : { modelCallId }),
           ...(name ? { toolName: boundedName(name) } : {}),
@@ -587,6 +676,78 @@ export class RunDiagnosticsRepository {
           ...(errorCode ? { errorCode } : {}),
         });
         toolNodes.push(node);
+      }
+
+      const hostGroups = new Map<string, HostDiagnosticEvent[]>();
+      for (const event of hostEvents) {
+        const group = hostGroups.get(event.operationId) ?? [];
+        group.push(event);
+        hostGroups.set(event.operationId, group);
+      }
+      const hostNodes: RunDiagnosticNode[] = [];
+      const toolNodeIds = new Set(toolNodes.map((node) => node.toolCallId));
+      const hostOperationIds = new Set(hostGroups.keys());
+      for (const [operationId, group] of hostGroups) {
+        const ordered = [...group].sort(
+          (left, right) => left.diagnosticSequence - right.diagnosticSequence,
+        );
+        const started = ordered.filter((item) => item.state === 'started');
+        const terminalEvents = ordered.filter((item) => item.state !== 'started');
+        const firstEvent = ordered[0];
+        const start = started[0];
+        const terminal = terminalEvents[0];
+        const contextReference = start ?? firstEvent;
+        const contextMatches =
+          contextReference !== undefined &&
+          ordered.every((item) => sameHostContext(contextReference, item));
+        const malformed =
+          started.length !== 1 || terminalEvents.length > 1 || !contextMatches || !start;
+        if (malformed || (!terminal && run.status !== 'running')) hasMalformedEvent = true;
+        const status = malformed
+          ? 'unknown'
+          : terminal
+            ? hostTerminalStatus(terminal)
+            : unclosedStatus(run.status);
+        const sourceSequenceStart = ordered[0]?.diagnosticSequence;
+        if (sourceSequenceStart === undefined) continue;
+        const parentOperationId = start?.parentOperationId;
+        const toolCallId = start?.toolCallId;
+        const hasParent = parentOperationId
+          ? hostOperationIds.has(parentOperationId)
+          : toolCallId
+            ? toolNodeIds.has(toolCallId)
+            : false;
+        const parentId = parentOperationId
+          ? `host:${parentOperationId}`
+          : toolCallId
+            ? `tool:${toolCallId}`
+            : undefined;
+        if (parentId && !hasParent) hasMalformedEvent = true;
+        const occurredAt = start?.createdAt ?? ordered[0]?.createdAt;
+        if (occurredAt === undefined) continue;
+        hostNodes.push(
+          runDiagnosticNodeSchema.parse({
+            id: `host:${operationId}`,
+            ...(parentId ? { parentId } : {}),
+            kind: 'host',
+            status,
+            sourceKind: 'host-diagnostic',
+            sourceId: operationId,
+            operationId,
+            ...(start ? { hostKind: start.kind, hostPhase: start.phase } : {}),
+            sourceEventIds: ordered.map((item) => item.id).slice(0, 200),
+            sourceSequenceStart,
+            sourceSequenceEnd: ordered.at(-1)?.diagnosticSequence,
+            evidenceState: start ? 'recorded' : 'missing',
+            occurredAt,
+            ...(start ? { startedAt: start.createdAt } : {}),
+            ...(terminal ? { endedAt: terminal.createdAt } : {}),
+            ...(terminal?.durationMs === undefined ? {} : { durationMs: terminal.durationMs }),
+            ...(start?.toolCallId ? { toolCallId: start.toolCallId } : {}),
+            ...(start?.executionId ? { executionId: start.executionId } : {}),
+            ...(terminal?.errorCode ? { errorCode: terminal.errorCode } : {}),
+          }),
+        );
       }
 
       if (expectCore) {
@@ -619,6 +780,9 @@ export class RunDiagnosticsRepository {
                     : 'completed';
         const first = Math.min(...roundChildren.map((node) => node.sourceSequenceStart ?? 0));
         const last = Math.max(...roundChildren.map((node) => node.sourceSequenceEnd ?? first));
+        const occurredAt = Math.min(
+          ...roundChildren.map((node) => node.occurredAt ?? Number.MAX_SAFE_INTEGER),
+        );
         return runDiagnosticNodeSchema.parse({
           id: `round:${round}`,
           kind: 'round',
@@ -631,10 +795,13 @@ export class RunDiagnosticsRepository {
           sourceSequenceStart: first,
           sourceSequenceEnd: last,
           evidenceState: 'derived',
+          ...(occurredAt === Number.MAX_SAFE_INTEGER ? {} : { occurredAt }),
           round,
         });
       });
-      const nodes = [...roundNodes, ...modelNodes, ...toolNodes].sort(compareNodePosition);
+      const nodes = [...roundNodes, ...modelNodes, ...toolNodes, ...hostNodes].sort(
+        compareNodePosition,
+      );
 
       const terminalEvents = events.filter(isTerminalEvent);
       if (run.status === 'running') {
