@@ -2969,6 +2969,7 @@ export const mcpBundledServerIdSchema = z.enum([
   'memory',
   'sequential-thinking',
   'fetch',
+  'github',
 ]);
 export type McpBundledServerId = z.infer<typeof mcpBundledServerIdSchema>;
 const mcpStdioTransportSchema = z

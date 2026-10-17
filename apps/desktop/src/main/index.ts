@@ -310,6 +310,9 @@ function bootstrap(initiallySuspended: boolean): ApplicationContext {
   const nodeRuntimeRoot = app.isPackaged
     ? path.join(process.resourcesPath, 'node-runtime')
     : path.join(app.getAppPath(), 'build', 'node-runtime');
+  const githubMcpRuntimeRoot = app.isPackaged
+    ? path.join(process.resourcesPath, 'github-mcp-runtime')
+    : path.join(app.getAppPath(), 'build', 'github-mcp-runtime');
   const managedNodeRuntime = new ManagedNodeRuntimeService({
     nodeRuntimeRoot,
     runner: dependencyProcess,
@@ -334,6 +337,7 @@ function bootstrap(initiallySuspended: boolean): ApplicationContext {
     resourcesRoot,
     runtimeAssetsRoot: pythonRuntimeAssetsRoot,
     nodeRuntimeRoot,
+    githubMcpRuntimeRoot,
     dependencies,
   });
   const mcpClientService = new McpClientService(store, {

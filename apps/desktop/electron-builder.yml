@@ -47,6 +47,13 @@ extraResources:
       - '**/*'
       - '!.DS_Store'
       - '!._*'
+  # ADR-0052：锁定 GitHub 官方 MCP Server 的 macOS arm64 可执行文件和 MIT 许可证。
+  - from: build/github-mcp-runtime
+    to: github-mcp-runtime
+    filter:
+      - '**/*'
+      - '!.DS_Store'
+      - '!._*'
   # 幻灯片预览的中文字体：系统自带中文字体是 TTC + AAT，opentype.js 解析不了，必须随包。
   - from: ../../resources/fonts
     to: fonts

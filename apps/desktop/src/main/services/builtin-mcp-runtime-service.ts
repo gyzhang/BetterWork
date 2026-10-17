@@ -1,4 +1,5 @@
-import { readFile } from 'node:fs/promises';
+import { constants } from 'node:fs';
+import { access, readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 
@@ -12,7 +13,7 @@ import type { McpStdioLaunch } from '../infrastructure/mcp-stdio-launch';
 import { managedNodeBin } from '../infrastructure/node-runtime';
 import { type SkillDependencyService } from './skill-dependency-service';
 
-const nodeServerPackages: Record<Exclude<McpBundledServerId, 'fetch'>, string> = {
+const nodeServerPackages: Record<Exclude<McpBundledServerId, 'fetch' | 'github'>, string> = {
   filesystem: '@modelcontextprotocol/server-filesystem',
   memory: '@modelcontextprotocol/server-memory',
   'sequential-thinking': '@modelcontextprotocol/server-sequential-thinking',
@@ -23,6 +24,7 @@ interface BuiltinMcpRuntimeOptions {
   readonly resourcesRoot: string;
   readonly runtimeAssetsRoot: string;
   readonly nodeRuntimeRoot: string;
+  readonly githubMcpRuntimeRoot?: string;
   readonly dependencies: SkillDependencyService;
 }
 
@@ -55,6 +57,28 @@ export class BuiltinMcpRuntimeService {
     signal: AbortSignal,
   ): Promise<McpStdioLaunch> {
     signal.throwIfAborted();
+    if (serverId === 'github') {
+      const runtimeRoot =
+        this.options.githubMcpRuntimeRoot ??
+        path.join(this.options.appRoot, 'build', 'github-mcp-runtime');
+      const executable = path.join(runtimeRoot, 'github-mcp-server');
+      try {
+        await access(executable, constants.X_OK);
+      } catch (error) {
+        throw new Error(
+          'GitHub MCP 随包运行时缺失或不可执行；请重新安装应用，或在开发环境运行 npm run github:mcp:prepare --workspace @betterwork/desktop。',
+          { cause: error },
+        );
+      }
+      const configuredArgs = serverArgs.filter(
+        (argument) =>
+          argument !== '--read-only' && argument !== '--' && !argument.startsWith('--read-only='),
+      );
+      return {
+        command: executable,
+        args: ['stdio', ...configuredArgs, '--read-only'],
+      };
+    }
     if (serverId !== 'fetch') {
       const scriptPath = await packageBinPath(this.options.appRoot, nodeServerPackages[serverId]);
       // ADR-0047 决策 3：优先用随包独立 Node（标准生态、版本与 Electron 解耦）；缺失时回退
