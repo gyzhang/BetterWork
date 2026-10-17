@@ -282,18 +282,79 @@ describe('run preload API', () => {
     expect(mocks.invoke).toHaveBeenCalledTimes(4);
   });
 
-  it('validates scoped diagnostic requests and responses through the three Run channels', async () => {
-    mocks.invoke.mockResolvedValue(null);
+  it('validates scoped diagnostic requests and responses through the Run channels', async () => {
+    const historyPage = {
+      runs: [],
+      stats: {
+        runCount: 0,
+        statusCounts: { completed: 0, failed: 0, cancelled: 0, running: 0 },
+        runFailure: {
+          failedRunCount: 0,
+          denominatorRunCount: 0,
+          excludedCancelledRunCount: 0,
+          excludedRunningRunCount: 0,
+          rate: null,
+        },
+        integrityCounts: { complete: 0, partial: 0, unavailable: 0 },
+        modelCallCount: 0,
+        toolCallCount: 0,
+        toolExecutionCount: 0,
+        failedToolExecutionCount: 0,
+        rejectedToolCallCount: 0,
+        usage: {
+          promptTokens: { knownSubtotal: '0', knownCallCount: 0, missingCallCount: 0 },
+          completionTokens: { knownSubtotal: '0', knownCallCount: 0, missingCallCount: 0 },
+          totalTokens: { knownSubtotal: '0', knownCallCount: 0, missingCallCount: 0 },
+        },
+        modelCallDurationMs: {
+          sampleCount: 0,
+          excludedCounts: {
+            pending: 0,
+            running: 0,
+            interrupted: 0,
+            unknown: 0,
+            missingMeasurement: 0,
+          },
+        },
+      },
+    };
+    mocks.invoke.mockImplementation(async (channel) =>
+      channel === IpcChannel.ListRunDiagnosticsHistory
+        ? historyPage
+        : channel === IpcChannel.ExportRunDiagnosticPackage
+          ? { cancelled: true }
+          : null,
+    );
     const scope = { workspaceId: 'workspace-1', taskId: 'task-1', runId: 'run-1' };
     await Promise.all([
       api().runs.getDiagnosticsSummary(scope),
+      api().runs.getDiagnosticsSources(scope),
       api().runs.listDiagnosticsPage(scope),
+      api().runs.listDiagnosticsHistory({ workspaceId: 'workspace-1' }),
+      api().runs.getDiagnosticIssueMark(scope),
+      api().runs.setDiagnosticIssueMark({
+        ...scope,
+        expectedRevision: null,
+        category: 'model',
+      }),
       api().runs.getDiagnosticNodeDetail({ ...scope, nodeId: 'tool:tool-1' }),
+      api().runs.exportDiagnosticPackage(scope),
     ]);
     expect(mocks.invoke.mock.calls).toEqual([
       [IpcChannel.GetRunDiagnosticsSummary, scope],
+      [IpcChannel.GetRunDiagnosticsSources, scope],
       [IpcChannel.ListRunDiagnosticsPage, { ...scope, pageSize: 50 }],
+      [
+        IpcChannel.ListRunDiagnosticsHistory,
+        { workspaceId: 'workspace-1', filter: {}, pageSize: 50 },
+      ],
+      [IpcChannel.GetRunDiagnosticIssueMark, scope],
+      [
+        IpcChannel.SetRunDiagnosticIssueMark,
+        { ...scope, expectedRevision: null, category: 'model' },
+      ],
       [IpcChannel.GetRunDiagnosticNodeDetail, { ...scope, nodeId: 'tool:tool-1' }],
+      [IpcChannel.ExportRunDiagnosticPackage, scope],
     ]);
 
     expect(() => api().runs.listDiagnosticsPage({ ...scope, pageSize: 201 })).toThrow();
@@ -303,6 +364,7 @@ describe('run preload API', () => {
         cursor: {
           runId: 'other-run',
           source: 'core-journal',
+          afterAt: 1,
           afterSequence: 1,
           afterKind: 'tool',
           afterNodeId: 'tool:tool-1',
@@ -311,9 +373,15 @@ describe('run preload API', () => {
     ).toThrow();
     expect(() => api().runs.getDiagnosticNodeDetail({ ...scope, nodeId: '' })).toThrow();
     await expect(api().runs.getDiagnosticsSummary(scope)).resolves.toBeNull();
+    await expect(api().runs.getDiagnosticsSources(scope)).resolves.toBeNull();
+    await expect(
+      api().runs.listDiagnosticsHistory({ workspaceId: 'workspace-1' }),
+    ).resolves.toEqual(historyPage);
 
     mocks.invoke.mockResolvedValueOnce({});
     await expect(api().runs.getDiagnosticsSummary(scope)).rejects.toThrow();
+    mocks.invoke.mockResolvedValueOnce({ cancelled: false });
+    await expect(api().runs.exportDiagnosticPackage(scope)).rejects.toThrow();
   });
 
   it('validates Run events through their mapped channel and removes the listener', () => {
@@ -338,6 +406,25 @@ describe('run preload API', () => {
 
     unsubscribe();
     expect(mocks.off).toHaveBeenCalledWith(IpcChannel.RunEvent, handler);
+  });
+
+  it('validates payload-free diagnostics invalidations and removes the listener', () => {
+    const listener = vi.fn();
+    const unsubscribe = api().runs.onDiagnosticsChanged(listener);
+    const handler = mocks.listeners.get(IpcChannel.RunDiagnosticsChanged);
+    const event = {
+      runId: 'run-1',
+      cursor: { source: 'host-diagnostic', afterSequence: 3 },
+    } as const;
+
+    expect(handler).toBeDefined();
+    handler?.({}, event);
+    expect(listener).toHaveBeenCalledWith(event);
+    expect(() => handler?.({}, { ...event, event: { stdout: 'private' } })).toThrow();
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    unsubscribe();
+    expect(mocks.off).toHaveBeenCalledWith(IpcChannel.RunDiagnosticsChanged, handler);
   });
 });
 
@@ -417,7 +504,10 @@ it('binds mapped Preload schemas and methods to their IPC channels at compile ti
     `const __activationEventUnsubscribe: () => void = notificationEventMethods[IpcChannel.NotificationActivated]((event) => { const id: string = event.id; });`,
     `const __runEventUnsubscribe: () => void = runEventMethods[IpcChannel.RunEvent]((event) => { const runId: string = event.runId; const sequence: number = event.sequence; });`,
     `const __runEventChannel: typeof IpcChannel.RunEvent = runEventContracts[IpcChannel.RunEvent].channel;`,
-    `type __AssertNever<Value extends never> = Value; type __MappedPreloadChannel = keyof typeof runInvokeContracts | keyof typeof workspaceTaskInvokeContracts | keyof typeof runEventContracts | keyof typeof artifactEvidenceInvokeContracts | keyof typeof modelSearchNotificationInvokeContracts | keyof typeof notificationEventContracts | keyof typeof knowledgeInvokeContracts | keyof typeof knowledgeEventContracts | keyof typeof scheduleInvokeContracts | keyof typeof scheduleEventContracts | keyof typeof skillInvokeContracts | keyof typeof expertInvokeContracts | keyof typeof taskSupportInvokeContracts | keyof typeof memoryInvokeContracts | keyof typeof mcpInvokeContracts | keyof typeof dependencyInvokeContracts | keyof typeof chromeInvokeContracts; type __ProtocolChannel = (typeof IpcChannel)[keyof typeof IpcChannel]; type __UnmappedPreloadChannel = Exclude<__ProtocolChannel, __MappedPreloadChannel>; type __UnknownPreloadChannel = Exclude<__MappedPreloadChannel, __ProtocolChannel>; type __PreloadChannelCoverage = __AssertNever<__UnmappedPreloadChannel | __UnknownPreloadChannel>;`,
+    `const __runDiagnosticsChangedUnsubscribe: () => void = runDiagnosticsChangedMethods[IpcChannel.RunDiagnosticsChanged]((event) => { const runId: string = event.runId; const source: 'host-diagnostic' = event.cursor.source; });`,
+    `const __runDiagnosticsChangedChannel: typeof IpcChannel.RunDiagnosticsChanged = runDiagnosticsChangedContracts[IpcChannel.RunDiagnosticsChanged].channel;`,
+    `const __runHistoryResult: Promise<ReturnType<BetterWorkDesktopApi['runs']['listDiagnosticsHistory']> extends Promise<infer Value> ? Value : never> = runInvokeMethods[IpcChannel.ListRunDiagnosticsHistory]({ workspaceId: 'workspace-1' });`,
+    `type __AssertNever<Value extends never> = Value; type __MappedPreloadChannel = keyof typeof runInvokeContracts | keyof typeof workspaceTaskInvokeContracts | keyof typeof runEventContracts | keyof typeof runDiagnosticsChangedContracts | keyof typeof artifactEvidenceInvokeContracts | keyof typeof modelSearchNotificationInvokeContracts | keyof typeof notificationEventContracts | keyof typeof knowledgeInvokeContracts | keyof typeof knowledgeEventContracts | keyof typeof scheduleInvokeContracts | keyof typeof scheduleEventContracts | keyof typeof skillInvokeContracts | keyof typeof expertInvokeContracts | keyof typeof taskSupportInvokeContracts | keyof typeof memoryInvokeContracts | keyof typeof mcpInvokeContracts | keyof typeof dependencyInvokeContracts | keyof typeof chromeInvokeContracts; type __ProtocolChannel = (typeof IpcChannel)[keyof typeof IpcChannel]; type __UnmappedPreloadChannel = Exclude<__ProtocolChannel, __MappedPreloadChannel>; type __UnknownPreloadChannel = Exclude<__MappedPreloadChannel, __ProtocolChannel>; type __PreloadChannelCoverage = __AssertNever<__UnmappedPreloadChannel | __UnknownPreloadChannel>;`,
     `const __knowledgeListResult: Promise<z.output<typeof knowledgeDocumentSummarySchema>[]> = knowledgeInvokeMethods[IpcChannel.ListKnowledge]({});`,
     `const __knowledgeJobResult: Promise<z.output<typeof knowledgeJobDetailSchema> | null> = knowledgeInvokeMethods[IpcChannel.GetKnowledgeJob]({ jobId: 'job-1' });`,
     `const __knowledgeSourceResult: Promise<OpenKnowledgeSourceResult> = knowledgeInvokeMethods[IpcChannel.OpenKnowledgeSource]({ sourcePath: '/tmp/source.md' });`,
@@ -503,6 +593,8 @@ it('binds mapped Preload schemas and methods to their IPC channels at compile ti
     `notificationEventMethods[IpcChannel.NotificationActivated]((event: { type: 'created' }) => {});`,
     `const __notificationEventWrongChannel: typeof IpcChannel.NotificationActivated = notificationEventContracts[IpcChannel.NotificationChangeEvent].channel;`,
     `runEventMethods[IpcChannel.RunEvent]((event) => { const sequence: string = event.sequence; });`,
+    `runDiagnosticsChangedMethods[IpcChannel.RunDiagnosticsChanged]((event: { runId: number }) => {});`,
+    `const __runDiagnosticsChangedWrongChannel: typeof IpcChannel.RunEvent = runDiagnosticsChangedContracts[IpcChannel.RunDiagnosticsChanged].channel;`,
     `const __runEventWrongChannel: typeof IpcChannel.ListRunEvents = runEventContracts[IpcChannel.RunEvent].channel;`,
     `knowledgeInvokeMethods[IpcChannel.GetKnowledgeJob]({ id: 'job-1' });`,
     `const __knowledgeContractWrongResponse: Promise<z.output<typeof knowledgeSearchResponseSchema>> = knowledgeInvokeMethods[IpcChannel.ListKnowledgeJobs]({});`,

@@ -19,6 +19,8 @@ import { KnowledgeScenario, knowledgeSteps } from './ui-knowledge-fixture';
 import { McpScenario, mcpSteps } from './ui-mcp-fixture';
 import { expertSteps, helpSteps, memorySteps } from './ui-page-route-steps';
 import { requireElement } from './ui-page-step-support';
+import { RunDiagnosticsScenario } from './ui-run-diagnostics-fixture';
+import { runDiagnosticsSteps, runRunDiagnosticsSteps } from './ui-run-diagnostics-steps';
 import {
   installScheduleApi,
   resetScheduleFixture,
@@ -100,6 +102,7 @@ async function runStep(step: string): Promise<ReturnType<typeof layoutChecks>> {
   await runExpertSteps(step);
   await runMemorySteps(step);
   await runScheduleSteps(step);
+  await runRunDiagnosticsSteps(step);
   await new Promise<void>((resolve) =>
     requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
   );
@@ -142,9 +145,11 @@ function PageScenario(): React.JSX.Element {
                 ? memorySteps
                 : pageId === 'schedule'
                   ? scheduleSteps
-                  : pageId === 'help'
-                    ? helpSteps
-                    : knowledgeSteps,
+                  : pageId === 'diagnostics'
+                    ? runDiagnosticsSteps
+                    : pageId === 'help'
+                      ? helpSteps
+                      : knowledgeSteps,
       runStep,
     };
     document.documentElement.dataset.fixtureReady = 'true';
@@ -162,6 +167,8 @@ function PageScenario(): React.JSX.Element {
           <MemoryScenario />
         ) : pageId === 'schedule' ? (
           <SchedulesScenario />
+        ) : pageId === 'diagnostics' ? (
+          <RunDiagnosticsScenario />
         ) : pageId === 'help' ? (
           <HelpPage />
         ) : (

@@ -207,6 +207,8 @@ describe('界面观感基线', () => {
       '.single-select-picker-option:has(input:focus-visible)',
       '.tab-panel:focus-visible',
       '.composer:has(textarea:focus-visible)',
+      // Run 诊断树与时间轴按条目键盘访问，复用统一焦点环几何。
+      '.run-execution-tree-entry:focus-visible, .run-diagnostic-timeline-item:focus-visible',
     ];
     const outlets = [
       ...new Set(

@@ -59,6 +59,8 @@ HostDiagnosticEvent 最小字段：id、runId、operationId、diagnosticSequence
 - state：`started / completed / failed / cancelled / interrupted`，每个 operationId 至多开始一次、收口一次；结束前必须存在同 Run 的开始，重复相同收口幂等、冲突收口拒绝。
 - Run phase：`prepare / audit / skill-cleanup / mcp-cleanup / artifact-commit`。
 - Skill phase：`dispatch / execute / validate / publish / cleanup`。只有代码中确实能观测到的边界才细分；未埋点的 Python/CLI 内部显示“内部过程未记录”，不得按总耗时平分。
+- Skill 关联沿用真实 `ScriptExecution.id` 与发起命令的 `toolCallId`：`dispatch` 覆盖 RunService 对绑定/命令/环境的解析以及 Supervisor 启动，启动失败沿用 `spawn-failed` 并记录为 dispatch 失败；`execute` 覆盖 Supervisor 结果收口；存在输出验证器时，`validate` 覆盖 `VerifiedExecutionOutput` 收集和持久化；文件成果登记时，`publish` 覆盖现有 `FileArtifactService.register`；`cleanup` 覆盖执行取消和有界清理。阶段记录只标明宿主观察到的区间，不推断子进程内部子阶段。
+- 输出诊断元数据仅允许受控结果、退出码、输出字节数与 `outputTruncated` 布尔值。完整 `reportHash` 和 `outputIds` 继续留在既有 ScriptExecution/VerifiedExecutionOutput 业务记录中，由 executionId 联查；不得复制 stdout/stderr、报告正文或文件路径，也不把这些诊断元数据注入后续模型消息。
 - 同一 phase 可发生多次，必须使用不同 operationId；禁止以 phase 名称作为唯一身份。跨 Run 的 parent/tool/execution 关系拒绝。
 
 准备只覆盖已持久创建 Run 后发生的装配区间；创建 Run 事务之前的选择校验不补造成可回看 Run。recordingVersion/已启用诊断部分在新 Run 创建事务中固定，用于区分旧记录和应该存在但缺失的事实，不能由“没有失败事件”推导诊断完整。
@@ -81,7 +83,11 @@ HostDiagnosticEvent 最小字段：id、runId、operationId、diagnosticSequence
 
 - summary：Run/Task/Session、持久终态、起止、调用/拒绝计数、已知用量及缺失调用数、recordingVersion/完整性。
 - node：独立节点 ID、显式父关系、类型、状态、实际执行与否、事件时间、可用耗时、可选 round/model/tool/execution 关联。不把两个来源序列拼成一个递增序列。
+- 双来源页面将 Core 与 Host 事件分别按各自来源序号投影；Host operation 的 start/terminal 合成一个可回看的阶段节点。因果树只按 parentOperationId、toolCallId 等已记录关联连接，缺失父节点保留为独立节点并说明关系缺失。全局分页按已记录 wall-clock 事件时间、来源固定顺序、该来源序号与节点 ID 建立稳定复合游标；不能把 Core sequence 与 diagnosticSequence 相加或比较成执行先后。
 - sources：引用当时固定的 ExpertRevision、Skill/环境绑定、model snapshot、材料读取、记忆修订/派发审计、连续上下文、ArtifactVersion；无法取得时给原因，不查询 latest 代替历史。
+- `run:diagnostics-sources` 使用 Run/Task/Workspace 同一范围请求与严格响应 Schema。固定上下文只投影精确修订 ID、版本号、状态和必要的模型显示名/指纹；Skill 环境只含状态、平台、lock hash 与依赖清单 hash。已选材料和读取足迹分开列出，只有 `read/parse` 可令 `wasRead=true`，`preview/search` 不能推断正文已采用。Knowledge/Artifact 通过精确 revision/version ID 读取元数据；输入快照核对 Workspace、hash、format 和 fileKey 绑定，但响应不含路径/fileKey/locator。
+- 记忆只回传选择身份/hash、读取身份与来源状态、重放身份及阶段时间；连续上下文只回传修订/hash/时间、省略原因和同 Task 的来源 Run/ArtifactVersion ID，不回传简报正文。成果只回传版本身份/hash、类型/校验元数据与已登记的精确输入关系，不回传标题、内容、Evidence 摘录或文件定位符。`dispatch-attempted` 只表示本地记录了派发尝试，不代表 Provider 服务端已收到。
+- revision、hash、Workspace/Run 归属不匹配时标记 unavailable 并降级整体完整性；缺少旧字段保持 `not-recorded`，不补取当前配置或 latest。完整性按字段白名单重新构造，不序列化底层 Repository 详情对象。
 - 查询必须验证 Run 真实归属；选中的 Task/Workspace 范围在 Main 校验。跨范围 ID 不返回其他对象明细，不依赖 Renderer 过滤。
 - 页面大小默认 50、上限 200；游标明确含来源边界及查询筛选身份。不把全量原始消息/工具载荷塞进 summary，节点载荷按需取；诊断详情文本最多 64 KiB UTF-8，带 truncated 标志，保留原事实不改写。
 
@@ -89,25 +95,25 @@ IPC channel 只在有实际 Main/Preload/Hook 消费者的卡中注册。Host �
 
 ## 7. 时间轴、统计与比较
 
-时间轴只展示已记录起止与正在运行的占位；单调 duration 与 wall-clock 区间含义分开。主进程/子进程未同步时钟不支持精确关键路径推断；并发节点耗时不得直接相加当总时长。数据异常或零长度区间有明确降级，不生成负宽度。
+时间轴只展示已记录起止与正在运行的占位；单调 duration 与 wall-clock 区间含义分开。并列时间按来源与原序号稳定排序，不推断因果。主进程/子进程未同步时钟不支持精确关键路径推断；并发节点耗时不得直接相加当总时长。子进程内部未埋点阶段显示未记录。数据异常或零长度区间有明确降级，不生成负宽度；每个图形区间均有键盘可聚焦的文本替代。
 
-统计范围固定 Workspace，可选 Task、时间窗、精确 ExpertRevision、SkillRevision、模型快照指纹；缺少历史版本时归入“未记录”，不混入当前版本。分页与统计使用相同筛选条件，返回样本数和纳入/排除计数。
+统计范围固定 Workspace，可选 Task、创建时间窗、精确 ExpertRevision、SkillRevision、模型快照指纹。时间窗按 `runs.created_at` 闭区间筛选；修订与指纹只读 Run 固定快照、绑定和请求准备快照，不回退到当前配置。缺少历史版本时归入“未记录”，不混入当前版本。分页游标绑定 Workspace 和完整筛选条件；分页列表与统计使用相同筛选条件，统计覆盖全部匹配 Run，不受当前页影响，并返回样本数和纳入/排除计数。
 
 - Run 失败率只按最终 completed/failed 的已终态样本计算，取消与运行中单列；没有可用分母返回未知。
 - 工具失败/参数拒绝分别统计，不能与 Run 失败率混用；tool-only 模型也计入调用尝试。
 - 每种 token 分别给 knownSubtotal、knownCallCount、missingCallCount；0 是服务真实返回时的有效值。父节点不重复累计子节点。
-- duration 的 p50/p95 使用已终态且有有效测量的调用样本，采用 nearest-rank，并返回样本数；不含 unknown、中断后估计值与正在运行的计时。
+- duration 的 p50/p95 只使用模型调用节点上实际记录的单调 `durationMs`；已终态且有有效测量的样本采用 nearest-rank，并返回样本数。pending、running、interrupted、unknown 和缺测各自计入排除数，不混入宿主阶段或工具阶段时长。
 - 不自动计算货币费用，不以 fake 模型测量结果宣称真实模型性能。墙钟/内存预算断言只进现有 bench 档，不进功能测试。
 
 ## 8. 问题标记与本地诊断包
 
 问题标记为用户显式操作，保存 runId、分类（`model / tool / material / artifact / lifecycle / other`）、可选诊断节点引用和更新时间；不保存自由文本备注、私有正文或自动写 Memory。保持每 Run 一个当前标记，允许更改和清除；修改标记不改变 Run。
 
-新增标记表在对应卡追加迁移，run 外键级联删除；节点引用必须属于该 Run。禁止预先建立通用反馈/训练平台。
+新增标记表在对应卡追加迁移，run 外键级联删除；节点引用必须属于该 Run。每 Run 只有一条当前标记，以 revision 和 expectedRevision 做比较并交换，避免并发更新互相覆盖；IPC 同时验证 Workspace→Task→Run 归属。保存失败保留界面所选值，成功只给局部短时确认。禁止预先建立通用反馈/训练平台。
 
-本地 JSON 诊断包有 schemaVersion、生成时间、代码/策略版本（可取得时）、Run/调用标识、受控分类/状态、计数/耗时、快照 ID/哈希和完整性/截断说明。文件保存由 Main 复用现有选择/导出设施，取消保存不报失败；不是新 Artifact 类型，不触发模型。
+本地 JSON 诊断包使用严格版本化白名单（当前 `schemaVersion: 1`），包含生成时间、可取得时的应用版本、Run/调用标识、受控分类/状态、计数/耗时、快照 ID/哈希和完整性说明。Main 在一个 AppStore 读事务中校验 Workspace→Task→Run，并读取完整诊断投影、来源投影和问题标记；包体由安全字段重新构造，不从原始 Run/事件 JSON 复制。文件保存复用现有选择设施，UTF-8 JSON 上限为 5 MiB，超限完整拒绝；取消保存返回静默取消结果，不报告失败，也不返回本地路径。导出不是新 Artifact 类型，不触发模型。
 
-导出默认不含：prompt、消息/工具输入输出正文、reasoning、记忆/材料全文、绝对路径、URL、Provider 原始错误、headers、env、凭据、脚本日志正文。不能仅依靠“把 JSON 序列化后替换 API Key”；必须用字段白名单重新构造。全包上限 5 MiB，超限明确拒绝并引导缩小范围，不静默裁成看似完整。
+导出默认不含：prompt、消息/工具输入输出正文、reasoning、记忆/材料全文、绝对路径、URL、Provider 原始错误、headers、env、凭据、脚本日志正文。不能仅依靠“把 JSON 序列化后替换 API Key”；必须用字段白名单重新构造。全包上限 5 MiB，超限明确拒绝、不静默裁成看似完整，并提示从执行记录选择调用较少的 Run 重试。
 
 ## 9. 离线评测与可选扩展
 

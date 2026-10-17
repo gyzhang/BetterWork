@@ -2,8 +2,10 @@ import {
   type AgentRuntimeEvent,
   RUN_DIAGNOSTICS_PAGE_SIZE_MAX,
   type RunDiagnosticNode,
+  type RunDiagnosticsChangedEvent,
   type RunDiagnosticsCursor,
   type RunDiagnosticsScopeRequest,
+  type RunDiagnosticsSources,
   type RunDiagnosticsSummary,
 } from '@betterwork/agent-protocol';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -18,6 +20,7 @@ import { mergeRunEvents } from '../lib/run-events';
 
 export interface RunDiagnosticsState {
   summary: RunDiagnosticsSummary | undefined;
+  sources: RunDiagnosticsSources | undefined;
   nodes: RunDiagnosticNode[];
   loading: boolean;
   error: string;
@@ -26,6 +29,7 @@ export interface RunDiagnosticsState {
 
 const emptyState = (): Omit<RunDiagnosticsState, 'refresh'> => ({
   summary: undefined,
+  sources: undefined,
   nodes: [],
   loading: false,
   error: '',
@@ -58,6 +62,7 @@ export function useRunDiagnostics(scope?: RunDiagnosticsScopeRequest): RunDiagno
     let eventSyncBusy = false;
     let eventSyncPending = false;
     let liveEvents: AgentRuntimeEvent[] = [];
+    let lastHostDiagnosticSequence = -1;
     const eventIds = new Set<string>();
     const isCurrent = (): boolean => active && requestIdRef.current === requestId;
 
@@ -103,13 +108,15 @@ export function useRunDiagnostics(scope?: RunDiagnosticsScopeRequest): RunDiagno
         try {
           do {
             refreshPending = false;
-            const [summary, nodes] = await Promise.all([
+            const [summary, nodes, sources] = await Promise.all([
               window.betterwork.runs.getDiagnosticsSummary(selectedScope),
               loadPages(),
+              window.betterwork.runs.getDiagnosticsSources(selectedScope),
             ]);
             if (!isCurrent()) return;
             setState((current) => ({
               summary: summary ?? undefined,
+              sources: sources ?? undefined,
               nodes: summary ? mergeRunDiagnosticNodes(current.nodes, nodes) : [],
               loading: false,
               error: '',
@@ -181,6 +188,14 @@ export function useRunDiagnostics(scope?: RunDiagnosticsScopeRequest): RunDiagno
       if (isRunDiagnosticsRelevantEvent(event)) startRefresh();
       if (hasRunEventSequenceGap(liveEvents)) syncEventGap();
     });
+    const unsubscribeDiagnostics = window.betterwork.runs.onDiagnosticsChanged(
+      (event: RunDiagnosticsChangedEvent) => {
+        if (!isCurrent() || event.runId !== runId) return;
+        if (event.cursor.afterSequence <= lastHostDiagnosticSequence) return;
+        lastHostDiagnosticSequence = event.cursor.afterSequence;
+        startRefresh();
+      },
+    );
 
     const retry = (): void => {
       startRefresh();
@@ -194,6 +209,7 @@ export function useRunDiagnostics(scope?: RunDiagnosticsScopeRequest): RunDiagno
       active = false;
       if (requestIdRef.current === requestId) refreshRef.current = () => undefined;
       unsubscribe();
+      unsubscribeDiagnostics();
     };
   }, [runId, taskId, workspaceId]);
 

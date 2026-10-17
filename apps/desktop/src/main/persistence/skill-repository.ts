@@ -256,6 +256,12 @@ export class SkillRepository {
     return row?.present === 1;
   }
 
+  /** Exact historical revision metadata without following the Skill's current revision. */
+  getRevisionSummary(revisionId: string): SkillRevisionSummary | undefined {
+    const row = this.getRevision(revisionId);
+    return row ? toRevision(row) : undefined;
+  }
+
   get(id: string): SkillDetail | undefined {
     const row = this.getRow(id);
     if (!row) return undefined;

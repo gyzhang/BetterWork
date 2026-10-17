@@ -22,6 +22,7 @@ import { ResearchDraftOperationRepository } from './research-draft-operation-rep
 import { RunArtifactSourceDeclarationRepository } from './run-artifact-source-declaration-repository';
 import { RunContextSnapshotRepository } from './run-context-snapshot-repository';
 import { RunDiagnosticsRepository } from './run-diagnostics-repository';
+import { RunHostDiagnosticRepository } from './run-host-diagnostic-repository';
 import { RunMaterialReadRepository } from './run-material-read-repository';
 import { RunMemoryContextRepository } from './run-memory-context-repository';
 import { RunRepository } from './run-repository';
@@ -58,6 +59,7 @@ export class AppStore {
   readonly taskContinuity: TaskContinuityRepository;
   readonly runs: RunRepository;
   readonly runDiagnostics: RunDiagnosticsRepository;
+  readonly runHostDiagnostics: RunHostDiagnosticRepository;
   readonly runSettings: RunSettingsRepository;
   readonly schedules: ScheduleRepository;
   readonly scheduleOccurrences: ScheduleOccurrenceRepository;
@@ -111,6 +113,7 @@ export class AppStore {
     this.taskContinuity = new TaskContinuityRepository(db);
     this.runs = new RunRepository(db);
     this.runDiagnostics = new RunDiagnosticsRepository(db);
+    this.runHostDiagnostics = new RunHostDiagnosticRepository(db);
     this.runSettings = new RunSettingsRepository(db);
     this.schedules = new ScheduleRepository(db);
     this.scheduleOccurrences = new ScheduleOccurrenceRepository(db);
@@ -239,7 +242,13 @@ export {
   type RunContextSnapshot,
   RunContextSnapshotRepository,
 } from './run-context-snapshot-repository';
-export { RunDiagnosticsRepository } from './run-diagnostics-repository';
+export {
+  RunDiagnosticIssueMarkConflictError,
+  RunDiagnosticIssueMarkNodeError,
+  RunDiagnosticIssueMarkScopeError,
+  RunDiagnosticsRepository,
+} from './run-diagnostics-repository';
+export { RunHostDiagnosticRepository } from './run-host-diagnostic-repository';
 export { RunMaterialReadRepository } from './run-material-read-repository';
 export {
   RunMemoryContextRepository,

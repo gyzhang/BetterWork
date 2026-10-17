@@ -5154,6 +5154,50 @@ select,
 .run-execution-details {
   gap: var(--space-12);
 }
+.run-diagnostics-history {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-12);
+}
+.run-diagnostic-issue-mark {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-8);
+}
+.run-diagnostic-package-export {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-8);
+}
+.run-diagnostic-issue-mark-description {
+  margin: 0;
+  color: var(--text-secondary);
+}
+.run-diagnostic-issue-mark-fields {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  align-items: end;
+  gap: var(--space-12);
+}
+.run-diagnostics-history-filters {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  align-items: end;
+  gap: var(--space-12);
+}
+.run-diagnostics-history-filter-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-8);
+}
+.run-diagnostics-history-stats {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-8);
+}
 .run-execution-details > .tabs {
   min-height: 0;
   flex: 1;
@@ -5175,6 +5219,11 @@ select,
   overflow-y: auto;
   overscroll-behavior: contain;
 }
+.run-diagnostics-sources {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-8);
+}
 .run-execution-round {
   display: grid;
   min-width: 0;
@@ -5186,6 +5235,63 @@ select,
   margin: 0;
   padding: 0;
   list-style: none;
+}
+.run-execution-tree-entry {
+  min-width: 0;
+}
+.run-execution-tree-entry:focus-visible,
+.run-diagnostic-timeline-item:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+.run-execution-node-list--nested {
+  margin-left: var(--space-16);
+  border-left: 1px solid var(--border-subtle);
+}
+.run-diagnostic-timeline {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-12);
+}
+.run-diagnostic-timeline-list {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-12);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.run-diagnostic-timeline-item {
+  min-width: 0;
+}
+.run-diagnostic-timeline-track {
+  position: relative;
+  height: 8px;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: var(--surface-raised);
+}
+.run-diagnostic-timeline-bar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  min-width: 3px;
+  border-radius: var(--radius-pill);
+  background: var(--text-secondary);
+}
+.run-diagnostic-timeline-bar--running {
+  background: var(--brand);
+}
+.run-diagnostic-timeline-bar--completed {
+  background: var(--success);
+}
+.run-diagnostic-timeline-bar--failed {
+  background: var(--danger);
+}
+.run-diagnostic-timeline-bar--rejected,
+.run-diagnostic-timeline-bar--cancelled,
+.run-diagnostic-timeline-bar--interrupted {
+  background: var(--warning);
 }
 .run-execution-node-fact {
   overflow-wrap: anywhere;

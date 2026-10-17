@@ -3,8 +3,10 @@
 import type {
   AgentRuntimeEvent,
   RunDiagnosticNode,
+  RunDiagnosticsChangedEvent,
   RunDiagnosticsPage,
   RunDiagnosticsScopeRequest,
+  RunDiagnosticsSources,
   RunDiagnosticsSummary,
 } from '@betterwork/agent-protocol';
 import { act, renderHook, waitFor } from '@testing-library/react';
@@ -126,24 +128,36 @@ const messageDeltaEvent = (runId: string, sequence: number): AgentRuntimeEvent =
 
 const getSummary =
   vi.fn<(input: RunDiagnosticsScopeRequest) => Promise<RunDiagnosticsSummary | null>>();
+const getSources =
+  vi.fn<(input: RunDiagnosticsScopeRequest) => Promise<RunDiagnosticsSources | null>>();
 const listPage =
   vi.fn<
     (input: RunDiagnosticsScopeRequest & { pageSize: number }) => Promise<RunDiagnosticsPage | null>
   >();
 const listEvents = vi.fn<(input: { runId: string }) => Promise<AgentRuntimeEvent[]>>();
 const onEvent = vi.fn<(listener: (event: AgentRuntimeEvent) => void) => () => void>();
+const onDiagnosticsChanged =
+  vi.fn<(listener: (event: RunDiagnosticsChangedEvent) => void) => () => void>();
 const unsubscribe = vi.fn<() => void>();
+const unsubscribeDiagnostics = vi.fn<() => void>();
 let eventListener: ((event: AgentRuntimeEvent) => void) | undefined;
+let diagnosticsChangedListener: ((event: RunDiagnosticsChangedEvent) => void) | undefined;
 
 const installApi = (): void => {
+  onDiagnosticsChanged.mockImplementation((listener) => {
+    diagnosticsChangedListener = listener;
+    return unsubscribeDiagnostics;
+  });
   Object.defineProperty(window, 'betterwork', {
     configurable: true,
     value: {
       runs: {
         getDiagnosticsSummary: getSummary,
+        getDiagnosticsSources: getSources,
         listDiagnosticsPage: listPage,
         listEvents,
         onEvent,
+        onDiagnosticsChanged,
       },
     },
   });
@@ -154,14 +168,23 @@ const emit = (event: AgentRuntimeEvent): void => {
   eventListener(event);
 };
 
+const emitDiagnosticsChanged = (event: RunDiagnosticsChangedEvent): void => {
+  if (!diagnosticsChangedListener) throw new Error('Diagnostics invalidation was not registered');
+  diagnosticsChangedListener(event);
+};
+
 afterEach(() => {
   Reflect.deleteProperty(window, 'betterwork');
   getSummary.mockReset();
+  getSources.mockReset();
   listPage.mockReset();
   listEvents.mockReset();
   onEvent.mockReset();
+  onDiagnosticsChanged.mockReset();
   unsubscribe.mockReset();
+  unsubscribeDiagnostics.mockReset();
   eventListener = undefined;
+  diagnosticsChangedListener = undefined;
 });
 
 describe('useRunDiagnostics', () => {
@@ -212,12 +235,43 @@ describe('useRunDiagnostics', () => {
     await act(async () => firstPage.resolve(pageOf('run-a', [])));
     await waitFor(() => expect(result.current.nodes.map((node) => node.id)).toEqual(['model']));
     expect(result.current.summary?.runId).toBe('run-a');
+    expect(getSources).toHaveBeenCalledWith(scopeOf('run-a'));
     expect(listPage.mock.calls.length).toBeGreaterThanOrEqual(2);
     const pageCount = listPage.mock.calls.length;
     act(() => emit(toolCompletedEvent('run-a', 4)));
     expect(listPage).toHaveBeenCalledTimes(pageCount);
     unmount();
     expect(unsubscribe).toHaveBeenCalledTimes(1);
+  });
+
+  it('refreshes the complete snapshot for host invalidations scoped to the selected Run', async () => {
+    installApi();
+    getSummary.mockResolvedValue(summaryOf('run-a'));
+    listPage.mockResolvedValue(pageOf('run-a', [nodeOf('run-a', 'host-phase', 0)]));
+    listEvents.mockResolvedValue([]);
+    onEvent.mockReturnValue(unsubscribe);
+
+    const { result, unmount } = renderHook(() => useRunDiagnostics(scopeOf('run-a')));
+    await waitFor(() => expect(result.current.summary?.runId).toBe('run-a'));
+    const initialQueries = listPage.mock.calls.length;
+
+    act(() => {
+      emitDiagnosticsChanged({
+        runId: 'another-run',
+        cursor: { source: 'host-diagnostic', afterSequence: 1 },
+      });
+    });
+    expect(listPage).toHaveBeenCalledTimes(initialQueries);
+
+    act(() => {
+      emitDiagnosticsChanged({
+        runId: 'run-a',
+        cursor: { source: 'host-diagnostic', afterSequence: 1 },
+      });
+    });
+    await waitFor(() => expect(listPage.mock.calls.length).toBeGreaterThan(initialQueries));
+    unmount();
+    expect(unsubscribeDiagnostics).toHaveBeenCalledTimes(1);
   });
 
   it('discards a late Run response after switching selection and unsubscribes the old Run', async () => {
@@ -255,6 +309,7 @@ describe('useRunDiagnostics', () => {
     const cursor = {
       runId: 'run-a',
       source: 'core-journal' as const,
+      afterAt: 102,
       afterSequence: 2,
       afterKind: 'model' as const,
       afterNodeId: 'model-a',
@@ -292,6 +347,7 @@ describe('useRunDiagnostics', () => {
     const cursor = {
       runId: 'run-a',
       source: 'core-journal' as const,
+      afterAt: 102,
       afterSequence: 2,
       afterKind: 'model' as const,
       afterNodeId: 'model-a',

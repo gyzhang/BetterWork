@@ -1,23 +1,37 @@
 import type {
   AgentRuntimeEvent,
+  HostDiagnosticEvent,
+  ListRunDiagnosticsHistoryRequest,
+  RunDiagnosticIssueMark,
   RunDiagnosticNode,
   RunDiagnosticNodeDetail,
   RunDiagnosticsCursor,
+  RunDiagnosticsHistoryEntry,
+  RunDiagnosticsHistoryFilter,
+  RunDiagnosticsHistoryPage,
+  RunDiagnosticsHistoryStats,
   RunDiagnosticsPage,
   RunDiagnosticsPageQuery,
   RunDiagnosticsRecording,
   RunDiagnosticsSummary,
   RunSummary,
+  SetRunDiagnosticIssueMarkRequest,
 } from '@betterwork/agent-protocol';
 import {
   agentRuntimeEventSchema,
+  hostDiagnosticEventSchema,
+  listRunDiagnosticsHistoryRequestSchema,
   RUN_DIAGNOSTIC_DETAIL_MAX_UTF8_BYTES,
+  RUN_DIAGNOSTICS_PAGE_SIZE_MAX,
+  runDiagnosticIssueMarkSchema,
   runDiagnosticNodeDetailSchema,
   runDiagnosticNodeSchema,
+  runDiagnosticsHistoryPageSchema,
   runDiagnosticsPageQuerySchema,
   runDiagnosticsPageSchema,
   runDiagnosticsRecordingSchema,
   runDiagnosticsSummarySchema,
+  setRunDiagnosticIssueMarkRequestSchema,
 } from '@betterwork/agent-protocol';
 import type Database from 'better-sqlite3';
 
@@ -32,12 +46,47 @@ interface RunDiagnosticsRow {
   diagnostics_sections_json: string | null;
 }
 
+interface RunDiagnosticsHistoryRow {
+  id: string;
+  task_id: string;
+  status: RunSummary['status'];
+  created_at: number;
+  expert_id: string | null;
+  expert_revision_id: string | null;
+  model_fingerprint: string | null;
+}
+
+interface RunDiagnosticIssueMarkRow {
+  run_id: string;
+  category: RunDiagnosticIssueMark['category'];
+  diagnostic_node_id: string | null;
+  revision: number;
+  updated_at: number;
+}
+
 interface StoredCoreEventRow {
   id: string;
   run_id: string;
   sequence: number;
   type: string;
   payload: string;
+  created_at: number;
+}
+
+interface StoredHostDiagnosticEventRow {
+  id: string;
+  run_id: string;
+  operation_id: string;
+  parent_operation_id: string | null;
+  diagnostic_sequence: number;
+  kind: HostDiagnosticEvent['kind'];
+  phase: HostDiagnosticEvent['phase'];
+  state: HostDiagnosticEvent['state'];
+  tool_call_id: string | null;
+  execution_id: string | null;
+  duration_ms: number | null;
+  error_code: HostDiagnosticEvent['errorCode'] | null;
+  metadata_json: string | null;
   created_at: number;
 }
 
@@ -234,13 +283,26 @@ const usageMetric = (
 const nodeOrder = (node: Pick<RunDiagnosticNode, 'kind'>): number => {
   if (node.kind === 'round') return 0;
   if (node.kind === 'model') return 1;
-  return 2;
+  if (node.kind === 'tool') return 2;
+  return 3;
 };
 
 const compareNodePosition = (
-  left: Pick<RunDiagnosticNode, 'kind' | 'id' | 'sourceSequenceStart'>,
-  right: Pick<RunDiagnosticNode, 'kind' | 'id' | 'sourceSequenceStart'>,
+  left: Pick<
+    RunDiagnosticNode,
+    'kind' | 'id' | 'sourceKind' | 'sourceSequenceStart' | 'occurredAt'
+  >,
+  right: Pick<
+    RunDiagnosticNode,
+    'kind' | 'id' | 'sourceKind' | 'sourceSequenceStart' | 'occurredAt'
+  >,
 ): number => {
+  const timeDifference =
+    (left.occurredAt ?? Number.MAX_SAFE_INTEGER) - (right.occurredAt ?? Number.MAX_SAFE_INTEGER);
+  if (timeDifference !== 0) return timeDifference;
+  const sourceDifference =
+    (left.sourceKind === 'core-journal' ? 0 : 1) - (right.sourceKind === 'core-journal' ? 0 : 1);
+  if (sourceDifference !== 0) return sourceDifference;
   const sequenceDifference =
     (left.sourceSequenceStart ?? Number.MAX_SAFE_INTEGER) -
     (right.sourceSequenceStart ?? Number.MAX_SAFE_INTEGER);
@@ -266,6 +328,42 @@ const terminalStatus = (
   return 'cancelled';
 };
 
+const hostTerminalStatus = (event: HostDiagnosticEvent): RunDiagnosticNode['status'] => {
+  if (event.state === 'completed') return 'completed';
+  if (event.state === 'failed') return 'failed';
+  if (event.state === 'cancelled') return 'cancelled';
+  if (event.state === 'interrupted') return 'interrupted';
+  return 'unknown';
+};
+
+const hostEventFromRow = (row: StoredHostDiagnosticEventRow): HostDiagnosticEvent => {
+  const metadata: unknown =
+    row.metadata_json === null ? undefined : (JSON.parse(row.metadata_json) as unknown);
+  return hostDiagnosticEventSchema.parse({
+    id: row.id,
+    runId: row.run_id,
+    operationId: row.operation_id,
+    ...(row.parent_operation_id === null ? {} : { parentOperationId: row.parent_operation_id }),
+    diagnosticSequence: row.diagnostic_sequence,
+    kind: row.kind,
+    phase: row.phase,
+    state: row.state,
+    ...(row.tool_call_id === null ? {} : { toolCallId: row.tool_call_id }),
+    ...(row.execution_id === null ? {} : { executionId: row.execution_id }),
+    ...(row.duration_ms === null ? {} : { durationMs: row.duration_ms }),
+    ...(row.error_code === null ? {} : { errorCode: row.error_code }),
+    ...(metadata === undefined ? {} : { metadata }),
+    createdAt: row.created_at,
+  });
+};
+
+const sameHostContext = (left: HostDiagnosticEvent, right: HostDiagnosticEvent): boolean =>
+  left.kind === right.kind &&
+  left.phase === right.phase &&
+  left.parentOperationId === right.parentOperationId &&
+  left.toolCallId === right.toolCallId &&
+  left.executionId === right.executionId;
+
 const coreEventQuerySql = `SELECT id, run_id, sequence, type, payload, created_at
   FROM run_events WHERE run_id = ? AND type IN (${eventTypeSql(DIAGNOSTIC_EVENT_TYPES)})
   ORDER BY sequence ASC, id ASC`;
@@ -283,9 +381,139 @@ const utf8Prefix = (value: string, maxBytes: number): { value: string; truncated
   return { value: prefix, truncated: true };
 };
 
+const nearestRank = (values: readonly number[], percentile: number): number | undefined => {
+  if (values.length === 0) return undefined;
+  const sorted = [...values].sort((left, right) => left - right);
+  return sorted[Math.ceil(percentile * sorted.length) - 1];
+};
+
+export class RunDiagnosticIssueMarkConflictError extends Error {
+  constructor() {
+    super('该 Run 的问题标记已在别处更新，请刷新后重试。');
+    this.name = 'RunDiagnosticIssueMarkConflictError';
+  }
+}
+
+export class RunDiagnosticIssueMarkScopeError extends Error {
+  constructor() {
+    super('问题标记的 Run 不属于当前 Workspace 与 Task。');
+    this.name = 'RunDiagnosticIssueMarkScopeError';
+  }
+}
+
+export class RunDiagnosticIssueMarkNodeError extends Error {
+  constructor() {
+    super('所选诊断节点不属于当前 Run。');
+    this.name = 'RunDiagnosticIssueMarkNodeError';
+  }
+}
+
 /** 从 Core Journal 构造只读执行链；不读取消息正文或 reasoning，也不写入第二份事件事实。 */
 export class RunDiagnosticsRepository {
   constructor(private readonly db: Database.Database) {}
+
+  /** 返回一次性 Core/Host 完整投影，避免导出混合多次分页读取。 */
+  getExportSnapshot(runId: string): DiagnosticsSnapshot | undefined {
+    return this.snapshot(runId);
+  }
+
+  getIssueMark(runId: string): RunDiagnosticIssueMark | undefined {
+    const row = this.db
+      .prepare(
+        `SELECT run_id, category, diagnostic_node_id, revision, updated_at
+         FROM run_diagnostic_issue_marks WHERE run_id = ?`,
+      )
+      .get(runId) as RunDiagnosticIssueMarkRow | undefined;
+    if (!row) return undefined;
+    return runDiagnosticIssueMarkSchema.parse({
+      runId: row.run_id,
+      category: row.category,
+      ...(row.diagnostic_node_id === null ? {} : { diagnosticNodeId: row.diagnostic_node_id }),
+      revision: row.revision,
+      updatedAt: row.updated_at,
+    });
+  }
+
+  setIssueMark(
+    input: SetRunDiagnosticIssueMarkRequest,
+    updatedAt: number,
+  ): RunDiagnosticIssueMark | null {
+    const request = setRunDiagnosticIssueMarkRequestSchema.parse(input);
+    return this.db.transaction(() => {
+      const run = this.db
+        .prepare(
+          `SELECT 1 AS present FROM runs r
+           INNER JOIN tasks t ON t.id = r.task_id
+           WHERE r.id = ? AND r.task_id = ? AND t.workspace_id = ?`,
+        )
+        .get(request.runId, request.taskId, request.workspaceId) as { present: number } | undefined;
+      if (!run) throw new RunDiagnosticIssueMarkScopeError();
+
+      const current = this.getIssueMark(request.runId);
+      const currentRevision = current?.revision ?? null;
+      if (currentRevision !== request.expectedRevision) {
+        throw new RunDiagnosticIssueMarkConflictError();
+      }
+
+      if (request.category === null) {
+        if (!current) return null;
+        const deleted = this.db
+          .prepare('DELETE FROM run_diagnostic_issue_marks WHERE run_id = ? AND revision = ?')
+          .run(request.runId, request.expectedRevision);
+        if (deleted.changes !== 1) throw new RunDiagnosticIssueMarkConflictError();
+        return null;
+      }
+
+      if (
+        request.diagnosticNodeId &&
+        !this.hasDiagnosticNode(request.runId, request.diagnosticNodeId)
+      ) {
+        throw new RunDiagnosticIssueMarkNodeError();
+      }
+
+      const revision = (currentRevision ?? 0) + 1;
+      if (current) {
+        const updated = this.db
+          .prepare(
+            `UPDATE run_diagnostic_issue_marks
+             SET category = ?, diagnostic_node_id = ?, revision = ?, updated_at = ?
+             WHERE run_id = ? AND revision = ?`,
+          )
+          .run(
+            request.category,
+            request.diagnosticNodeId ?? null,
+            revision,
+            updatedAt,
+            request.runId,
+            request.expectedRevision,
+          );
+        if (updated.changes !== 1) throw new RunDiagnosticIssueMarkConflictError();
+      } else {
+        const inserted = this.db
+          .prepare(
+            `INSERT INTO run_diagnostic_issue_marks
+               (run_id, category, diagnostic_node_id, revision, updated_at)
+             VALUES (?, ?, ?, ?, ?) ON CONFLICT(run_id) DO NOTHING`,
+          )
+          .run(
+            request.runId,
+            request.category,
+            request.diagnosticNodeId ?? null,
+            revision,
+            updatedAt,
+          );
+        if (inserted.changes !== 1) throw new RunDiagnosticIssueMarkConflictError();
+      }
+
+      return runDiagnosticIssueMarkSchema.parse({
+        runId: request.runId,
+        category: request.category,
+        ...(request.diagnosticNodeId ? { diagnosticNodeId: request.diagnosticNodeId } : {}),
+        revision,
+        updatedAt,
+      });
+    })();
+  }
 
   getSummary(runId: string): RunDiagnosticsSummary | undefined {
     const snapshot = this.snapshot(runId);
@@ -303,7 +531,9 @@ export class RunDiagnosticsRepository {
         compareNodePosition(node, {
           id: cursor.afterNodeId,
           kind: cursor.afterKind,
+          sourceKind: cursor.source,
           sourceSequenceStart: cursor.afterSequence,
+          occurredAt: cursor.afterAt,
         }) > 0
       );
     });
@@ -313,7 +543,8 @@ export class RunDiagnosticsRepository {
       last && remaining.length > nodes.length
         ? {
             runId: query.runId,
-            source: 'core-journal',
+            source: last.sourceKind,
+            afterAt: last.occurredAt ?? Number.MAX_SAFE_INTEGER,
             afterSequence: last.sourceSequenceStart ?? 0,
             afterKind: last.kind,
             afterNodeId: last.id,
@@ -325,6 +556,223 @@ export class RunDiagnosticsRepository {
       ...(nextCursor ? { nextCursor } : {}),
       integrity: snapshot.summary.integrity,
     });
+  }
+
+  getHistoryPage(input: ListRunDiagnosticsHistoryRequest): RunDiagnosticsHistoryPage {
+    const query = listRunDiagnosticsHistoryRequestSchema.parse(input);
+    const conditions = ['t.workspace_id = ?'];
+    const parameters: Array<string | number> = [query.workspaceId];
+    const filter: RunDiagnosticsHistoryFilter = query.filter;
+    if (filter.taskId !== undefined) {
+      conditions.push('r.task_id = ?');
+      parameters.push(filter.taskId);
+    }
+    if (filter.fromCreatedAt !== undefined) {
+      conditions.push('r.created_at >= ?');
+      parameters.push(filter.fromCreatedAt);
+    }
+    if (filter.throughCreatedAt !== undefined) {
+      conditions.push('r.created_at <= ?');
+      parameters.push(filter.throughCreatedAt);
+    }
+    if (filter.expertRevisionId !== undefined) {
+      conditions.push('s.expert_revision_id = ?');
+      parameters.push(filter.expertRevisionId);
+    }
+    if (filter.skillRevisionId !== undefined) {
+      conditions.push(
+        'EXISTS (SELECT 1 FROM run_skill_bindings b WHERE b.run_id = r.id AND b.skill_revision_id = ?)',
+      );
+      parameters.push(filter.skillRevisionId);
+    }
+    if (filter.modelFingerprint !== undefined) {
+      conditions.push(
+        `EXISTS (
+          SELECT 1 FROM run_memory_contexts m
+          WHERE m.run_id = r.id
+            AND CASE WHEN json_valid(m.model_snapshot_json)
+                THEN json_extract(m.model_snapshot_json, '$.fingerprint') END = ?
+        )`,
+      );
+      parameters.push(filter.modelFingerprint);
+    }
+    const rows = this.db
+      .prepare(
+        `SELECT r.id, r.task_id, r.status, r.created_at,
+                s.expert_id, s.expert_revision_id,
+                CASE WHEN json_valid(m.model_snapshot_json)
+                  THEN json_extract(m.model_snapshot_json, '$.fingerprint') END AS model_fingerprint
+         FROM runs r
+         JOIN tasks t ON t.id = r.task_id
+         LEFT JOIN run_context_snapshots s ON s.run_id = r.id
+         LEFT JOIN run_memory_contexts m ON m.run_id = r.id
+         WHERE ${conditions.join(' AND ')}
+         ORDER BY r.created_at DESC, r.id DESC`,
+      )
+      .all(...parameters) as RunDiagnosticsHistoryRow[];
+
+    const summaries = rows.flatMap((row) => {
+      const snapshot = this.snapshot(row.id);
+      return snapshot ? [{ row, ...snapshot }] : [];
+    });
+    const stats = this.summarizeHistory(
+      summaries.map(({ row, summary, nodes }) => ({
+        status: row.status,
+        summary,
+        nodes,
+      })),
+    );
+    const cursor = query.cursor;
+    const afterCursor = cursor
+      ? rows.filter(
+          (row) =>
+            row.created_at < cursor.afterCreatedAt ||
+            (row.created_at === cursor.afterCreatedAt && row.id < cursor.afterRunId),
+        )
+      : rows;
+    const pageRows = afterCursor.slice(0, query.pageSize);
+    const runs: RunDiagnosticsHistoryEntry[] = pageRows.flatMap((row) => {
+      const snapshot = summaries.find((item) => item.row.id === row.id);
+      if (!snapshot) return [];
+      const skillRevisionIds = (
+        this.db
+          .prepare(
+            `SELECT skill_revision_id FROM run_skill_bindings
+             WHERE run_id = ? ORDER BY created_at ASC, id ASC LIMIT 50`,
+          )
+          .all(row.id) as Array<{ skill_revision_id: string }>
+      ).map(({ skill_revision_id }) => skill_revision_id);
+      return [
+        {
+          summary: snapshot.summary,
+          createdAt: row.created_at,
+          ...(row.expert_id === null ? {} : { expertId: row.expert_id }),
+          ...(row.expert_revision_id === null ? {} : { expertRevisionId: row.expert_revision_id }),
+          skillRevisionIds,
+          ...(typeof row.model_fingerprint === 'string'
+            ? { modelFingerprint: row.model_fingerprint }
+            : {}),
+        },
+      ];
+    });
+    const last = pageRows.at(-1);
+    const nextCursor =
+      last && afterCursor.length > pageRows.length
+        ? {
+            workspaceId: query.workspaceId,
+            filter,
+            afterCreatedAt: last.created_at,
+            afterRunId: last.id,
+          }
+        : undefined;
+    return runDiagnosticsHistoryPageSchema.parse({
+      runs,
+      stats,
+      ...(nextCursor ? { nextCursor } : {}),
+    });
+  }
+
+  private summarizeHistory(
+    snapshots: readonly {
+      status: RunSummary['status'];
+      summary: RunDiagnosticsSummary;
+      nodes: readonly RunDiagnosticNode[];
+    }[],
+  ): RunDiagnosticsHistoryStats {
+    const statusCounts = { completed: 0, failed: 0, cancelled: 0, running: 0 };
+    const integrityCounts = { complete: 0, partial: 0, unavailable: 0 };
+    const usage = {
+      promptTokens: { knownSubtotal: 0n, knownCallCount: 0, missingCallCount: 0 },
+      completionTokens: { knownSubtotal: 0n, knownCallCount: 0, missingCallCount: 0 },
+      totalTokens: { knownSubtotal: 0n, knownCallCount: 0, missingCallCount: 0 },
+    };
+    const durations: number[] = [];
+    const excludedCounts = {
+      pending: 0,
+      running: 0,
+      interrupted: 0,
+      unknown: 0,
+      missingMeasurement: 0,
+    };
+    let failedToolExecutionCount = 0;
+    let modelCallCount = 0;
+    let toolCallCount = 0;
+    let toolExecutionCount = 0;
+    let rejectedToolCallCount = 0;
+    for (const { status, summary, nodes } of snapshots) {
+      statusCounts[status] += 1;
+      integrityCounts[summary.integrity] += 1;
+      modelCallCount += summary.modelCallCount;
+      toolCallCount += summary.toolCallCount;
+      toolExecutionCount += summary.toolExecutionCount;
+      failedToolExecutionCount += summary.failedToolExecutionCount;
+      rejectedToolCallCount += summary.rejectedToolCallCount;
+      for (const metric of ['promptTokens', 'completionTokens', 'totalTokens'] as const) {
+        usage[metric].knownSubtotal += BigInt(summary.usage[metric].knownSubtotal);
+        usage[metric].knownCallCount += summary.usage[metric].knownCallCount;
+        usage[metric].missingCallCount += summary.usage[metric].missingCallCount;
+      }
+      for (const node of nodes) {
+        if (node.kind !== 'model') continue;
+        if (node.status === 'pending') excludedCounts.pending += 1;
+        else if (node.status === 'running') excludedCounts.running += 1;
+        else if (node.status === 'interrupted') excludedCounts.interrupted += 1;
+        else if (node.status === 'unknown' || node.status === 'rejected') {
+          excludedCounts.unknown += 1;
+        } else if (
+          node.status === 'completed' ||
+          node.status === 'failed' ||
+          node.status === 'cancelled'
+        ) {
+          if (node.durationMs === undefined) excludedCounts.missingMeasurement += 1;
+          else durations.push(node.durationMs);
+        }
+      }
+    }
+    const denominatorRunCount = statusCounts.completed + statusCounts.failed;
+    const rate = denominatorRunCount === 0 ? null : statusCounts.failed / denominatorRunCount;
+    return {
+      runCount: snapshots.length,
+      statusCounts,
+      runFailure: {
+        failedRunCount: statusCounts.failed,
+        denominatorRunCount,
+        excludedCancelledRunCount: statusCounts.cancelled,
+        excludedRunningRunCount: statusCounts.running,
+        rate,
+      },
+      integrityCounts,
+      modelCallCount,
+      toolCallCount,
+      toolExecutionCount,
+      failedToolExecutionCount,
+      rejectedToolCallCount,
+      usage: {
+        promptTokens: {
+          knownSubtotal: usage.promptTokens.knownSubtotal.toString(),
+          knownCallCount: usage.promptTokens.knownCallCount,
+          missingCallCount: usage.promptTokens.missingCallCount,
+        },
+        completionTokens: {
+          knownSubtotal: usage.completionTokens.knownSubtotal.toString(),
+          knownCallCount: usage.completionTokens.knownCallCount,
+          missingCallCount: usage.completionTokens.missingCallCount,
+        },
+        totalTokens: {
+          knownSubtotal: usage.totalTokens.knownSubtotal.toString(),
+          knownCallCount: usage.totalTokens.knownCallCount,
+          missingCallCount: usage.totalTokens.missingCallCount,
+        },
+      },
+      modelCallDurationMs: {
+        sampleCount: durations.length,
+        ...(nearestRank(durations, 0.5) === undefined ? {} : { p50: nearestRank(durations, 0.5) }),
+        ...(nearestRank(durations, 0.95) === undefined
+          ? {}
+          : { p95: nearestRank(durations, 0.95) }),
+        excludedCounts,
+      },
+    };
   }
 
   getNodeDetail(runId: string, nodeId: string): RunDiagnosticNodeDetail | undefined {
@@ -394,6 +842,25 @@ export class RunDiagnosticsRepository {
     return runDiagnosticNodeDetailSchema.parse(detail);
   }
 
+  private hasDiagnosticNode(runId: string, nodeId: string): boolean {
+    let cursor: RunDiagnosticsCursor | undefined;
+    const visitedCursors = new Set<string>();
+    while (true) {
+      const page = this.getPage({
+        runId,
+        pageSize: RUN_DIAGNOSTICS_PAGE_SIZE_MAX,
+        ...(cursor ? { cursor } : {}),
+      });
+      if (!page) return false;
+      if (page.nodes.some((node) => node.id === nodeId)) return true;
+      if (!page.nextCursor) return false;
+      const cursorKey = JSON.stringify(page.nextCursor);
+      if (visitedCursors.has(cursorKey)) return false;
+      visitedCursors.add(cursorKey);
+      cursor = page.nextCursor;
+    }
+  }
+
   private snapshot(runId: string): DiagnosticsSnapshot | undefined {
     return this.db.transaction(() => {
       const run = this.db
@@ -440,6 +907,22 @@ export class RunDiagnosticsRepository {
       }
 
       const expectCore = recording?.sections.includes('core') ?? false;
+      const hostEvents: HostDiagnosticEvent[] = [];
+      const hostRows = this.db
+        .prepare(
+          `SELECT id, run_id, operation_id, parent_operation_id, diagnostic_sequence,
+                  kind, phase, state, tool_call_id, execution_id, duration_ms,
+                  error_code, metadata_json, created_at
+           FROM run_diagnostic_events WHERE run_id = ? ORDER BY diagnostic_sequence ASC`,
+        )
+        .all(runId) as StoredHostDiagnosticEventRow[];
+      for (const row of hostRows) {
+        try {
+          hostEvents.push(hostEventFromRow(row));
+        } catch {
+          hasMalformedEvent = true;
+        }
+      }
       const modelGroups = groupModelEvents(events);
       const toolGroups = groupToolEvents(events);
       const modelNodes: RunDiagnosticNode[] = [];
@@ -484,6 +967,7 @@ export class RunDiagnosticsRepository {
             start && group.started.length === 1 && ending && group.ended.length === 1
               ? 'recorded'
               : 'missing',
+          occurredAt: Math.min(...group.events.map((item) => item.createdAt)),
           ...(round === undefined ? {} : { round }),
           ...(start ? { startedAt: start.createdAt } : {}),
           ...(ending ? { endedAt: ending.createdAt, durationMs: ending.durationMs } : {}),
@@ -578,6 +1062,7 @@ export class RunDiagnosticsRepository {
           sourceSequenceStart: startSequence,
           sourceSequenceEnd: sequenceEnd(sourceEvents),
           evidenceState: duplicateOrAmbiguous || (!start && !outcome) ? 'missing' : 'recorded',
+          occurredAt: Math.min(...sourceEvents.map((item) => item.createdAt)),
           ...(round === undefined ? {} : { round }),
           ...(modelCallId === undefined ? {} : { modelCallId }),
           ...(name ? { toolName: boundedName(name) } : {}),
@@ -587,6 +1072,78 @@ export class RunDiagnosticsRepository {
           ...(errorCode ? { errorCode } : {}),
         });
         toolNodes.push(node);
+      }
+
+      const hostGroups = new Map<string, HostDiagnosticEvent[]>();
+      for (const event of hostEvents) {
+        const group = hostGroups.get(event.operationId) ?? [];
+        group.push(event);
+        hostGroups.set(event.operationId, group);
+      }
+      const hostNodes: RunDiagnosticNode[] = [];
+      const toolNodeIds = new Set(toolNodes.map((node) => node.toolCallId));
+      const hostOperationIds = new Set(hostGroups.keys());
+      for (const [operationId, group] of hostGroups) {
+        const ordered = [...group].sort(
+          (left, right) => left.diagnosticSequence - right.diagnosticSequence,
+        );
+        const started = ordered.filter((item) => item.state === 'started');
+        const terminalEvents = ordered.filter((item) => item.state !== 'started');
+        const firstEvent = ordered[0];
+        const start = started[0];
+        const terminal = terminalEvents[0];
+        const contextReference = start ?? firstEvent;
+        const contextMatches =
+          contextReference !== undefined &&
+          ordered.every((item) => sameHostContext(contextReference, item));
+        const malformed =
+          started.length !== 1 || terminalEvents.length > 1 || !contextMatches || !start;
+        if (malformed || (!terminal && run.status !== 'running')) hasMalformedEvent = true;
+        const status = malformed
+          ? 'unknown'
+          : terminal
+            ? hostTerminalStatus(terminal)
+            : unclosedStatus(run.status);
+        const sourceSequenceStart = ordered[0]?.diagnosticSequence;
+        if (sourceSequenceStart === undefined) continue;
+        const parentOperationId = start?.parentOperationId;
+        const toolCallId = start?.toolCallId;
+        const hasParent = parentOperationId
+          ? hostOperationIds.has(parentOperationId)
+          : toolCallId
+            ? toolNodeIds.has(toolCallId)
+            : false;
+        const parentId = parentOperationId
+          ? `host:${parentOperationId}`
+          : toolCallId
+            ? `tool:${toolCallId}`
+            : undefined;
+        if (parentId && !hasParent) hasMalformedEvent = true;
+        const occurredAt = start?.createdAt ?? ordered[0]?.createdAt;
+        if (occurredAt === undefined) continue;
+        hostNodes.push(
+          runDiagnosticNodeSchema.parse({
+            id: `host:${operationId}`,
+            ...(parentId ? { parentId } : {}),
+            kind: 'host',
+            status,
+            sourceKind: 'host-diagnostic',
+            sourceId: operationId,
+            operationId,
+            ...(start ? { hostKind: start.kind, hostPhase: start.phase } : {}),
+            sourceEventIds: ordered.map((item) => item.id).slice(0, 200),
+            sourceSequenceStart,
+            sourceSequenceEnd: ordered.at(-1)?.diagnosticSequence,
+            evidenceState: start ? 'recorded' : 'missing',
+            occurredAt,
+            ...(start ? { startedAt: start.createdAt } : {}),
+            ...(terminal ? { endedAt: terminal.createdAt } : {}),
+            ...(terminal?.durationMs === undefined ? {} : { durationMs: terminal.durationMs }),
+            ...(start?.toolCallId ? { toolCallId: start.toolCallId } : {}),
+            ...(start?.executionId ? { executionId: start.executionId } : {}),
+            ...(terminal?.errorCode ? { errorCode: terminal.errorCode } : {}),
+          }),
+        );
       }
 
       if (expectCore) {
@@ -619,6 +1176,9 @@ export class RunDiagnosticsRepository {
                     : 'completed';
         const first = Math.min(...roundChildren.map((node) => node.sourceSequenceStart ?? 0));
         const last = Math.max(...roundChildren.map((node) => node.sourceSequenceEnd ?? first));
+        const occurredAt = Math.min(
+          ...roundChildren.map((node) => node.occurredAt ?? Number.MAX_SAFE_INTEGER),
+        );
         return runDiagnosticNodeSchema.parse({
           id: `round:${round}`,
           kind: 'round',
@@ -631,10 +1191,13 @@ export class RunDiagnosticsRepository {
           sourceSequenceStart: first,
           sourceSequenceEnd: last,
           evidenceState: 'derived',
+          ...(occurredAt === Number.MAX_SAFE_INTEGER ? {} : { occurredAt }),
           round,
         });
       });
-      const nodes = [...roundNodes, ...modelNodes, ...toolNodes].sort(compareNodePosition);
+      const nodes = [...roundNodes, ...modelNodes, ...toolNodes, ...hostNodes].sort(
+        compareNodePosition,
+      );
 
       const terminalEvents = events.filter(isTerminalEvent);
       if (run.status === 'running') {
@@ -653,11 +1216,12 @@ export class RunDiagnosticsRepository {
       }
       const startEvents = events.filter((event) => event.type === 'run.started');
       if (startEvents.length > 1) hasMalformedEvent = true;
-      const integrity = hasMalformedEvent
-        ? 'partial'
-        : recording === undefined
-          ? 'unavailable'
-          : 'complete';
+      const integrity =
+        hasMalformedEvent || (recording?.sections.includes('host') ?? false)
+          ? 'partial'
+          : recording === undefined
+            ? 'unavailable'
+            : 'complete';
       const modelCallCount = [...modelGroups.values()].reduce(
         (count, group) => count + Number(group.started.length > 0),
         0,

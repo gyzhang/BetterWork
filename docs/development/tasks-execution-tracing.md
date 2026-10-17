@@ -37,21 +37,21 @@
 | AT08 | 执行链详情领域组件 | AT07 | M1 | done | 602dc92f；placeholder 最小行为反例红 7 项；定向 10 项绿；check:quick 最终退出 0（lint/format/typecheck/docs:check 156、functional 197/3174、动态消费者 277、heavy 5 文件/210；覆盖 587/625=93.92%）；迁移 v47 |
 | AT09 | 工作页当前/历史 Run 详情入口 | AT08 | M1 | done | 当前/历史 scoped 入口、切 Task/收起面板不取消 Run；ContextPanel 33 项、快检含 App heavy 通过；覆盖 604/643=93.93%，迁移 v47 |
 | AT10 | 第 1 期离线跨层回归 | AT09 | M1 | done | RunService＋临时文件 SQLite 重装配 red→green；IPC/Preload/Hook/React 合约 446 项通过；初始 check:quick 退出 0（functional 197/3175、动态 277、heavy 211；覆盖 605/643=94.09%）；同步最新 main 后保留模型角色 v47、诊断元数据迁移为 v48；整合 check:quick 退出 0（functional 196/3157、动态 278、heavy 212；覆盖 605/643=94.09%）；ExpertsView 焦点竞态测试改用 waitFor；PR #214 head 70158c0d 的 Code lint、Quick code check、PR Gate 均通过并于 2026-10-17 squash 合并为 1d94b898；完整验证及真实 UI/模型/性能/安装未验，ADR-0050 仍 Proposed，AT11–AT25 不在本次范围 |
-| AT11 | 宿主事实流迁移与记录器 | AT10 | M2 | todo | 未开工 |
-| AT12 | Run 准备、审计、清理、提交观测 | AT11 | M2 | todo | 未开工 |
-| AT13 | Skill 宿主阶段与执行关联 | AT12 | M2 | todo | 未开工 |
-| AT14 | 精确工作依据联查 | AT13 | M2 | todo | 未开工 |
-| AT15 | 双来源执行树与时间轴 | AT14 | M2 | todo | 未开工 |
-| AT16 | 观测故障、中断与恢复回归 | AT15 | M2 | todo | 未开工；只用隔离宿主 |
-| AT17 | 统计筛选与确定性聚合 | AT16 | M3 | todo | 未开工 |
-| AT18 | 执行记录筛选与统计呈现 | AT17 | M3 | todo | 未开工 |
-| AT19 | 用户问题标记 | AT18 | M3 | todo | 未开工 |
-| AT20 | 本地脱敏 JSON 诊断包 | AT19 | M3 | todo | 未开工；不连接远端 |
-| AT21 | 固定合成样本与版本比较 | AT20 | M4 | todo | 未开工；不新增付费重跑产品 |
-| AT22 | 离线总收口与人工验收清单 | AT21 | M4 | todo | 未开工 |
-| AT23 | 真实 UI 专项与人工走查 | AT22 | 独立 | todo | 待用户单独安排，未计入 AT01–AT22 |
+| AT11 | 宿主事实流迁移与记录器 | AT10 | M2 | done | 起点/当前 HEAD `05f4d8b3`；迁移 v49。严格宿主事件 Schema、独立序号仓储与注入时钟记录器；旧 Run 不回填，新 Run 的 host 记录尚未投影时摘要为 partial。Schema/迁移/仓储反例红跑退出 1，四文件定向绿跑 140 项通过；状态摘要完整性反例另红 1 项后转绿；AT10 RunService 跨层旧预期改为 partial，heavy 定向 1 项通过。最终 `npm run check:quick -- --base 05f4d8b3` 退出 0：docs:check 156、functional 195 文件/3159 项、动态 2 文件/280 项、heavy 6 文件/212 项；覆盖 93/108=86.11%。UI/模型/性能/安装未验，详见 2026-10-17 日志 |
+| AT12 | Run 准备、审计、清理、提交观测 | AT11 | M2 | done | RunService/RunEventLifecycle 在原边界记录 prepare/audit/skill-cleanup/mcp-cleanup/artifact-commit；Main 显式注入记录器与 wall/monotonic clock。生命周期最小反例红跑退出 1；Lifecycle functional 33 项、RunService heavy 111 项通过；关闭/故障观测与正常观测的业务调用顺序、终态和产物一致，清理失败仍尝试 MCP，提交后取消拒绝，afterCompleted 失败不回写已完成 Run；观测 SQLite 写故障安全日志不含错误正文，业务 Journal 失败仍单独沿用既有终态。最终 `npm run check:quick -- --base 05f4d8b3` 退出 0（含未提交 AT11+AT12 差异：docs 156、functional 195/3162、动态消费者 280、heavy 6/214；覆盖 149/167=89.22%）；迁移仍 v49，UI/模型未验，详见 2026-10-17 日志 |
+| AT13 | Skill 宿主阶段与执行关联 | AT12 | M2 | done | 本地 `codex/at11-at25`；dispatch/execute/validate/publish/cleanup 关联真实 executionId/toolCallId，输出只记录受控字节数、截断标志和结果元数据。派发最小反例红 1→恢复后绿 1；Skill/协议定向 77 项、RunService 桥接 heavy 5 项通过；最终 check:quick 退出 0（functional 195/3165、动态消费者 280、heavy 6 文件/215；覆盖 249/279=89.25%）；迁移 v49，真实 PPT/UI/模型未验，ADR-0050 保持 Proposed，详见 2026-10-17 日志 |
+| AT14 | 精确工作依据联查 | AT13 | M2 | done | 固定 Run 修订、材料实际读取、记忆/连续上下文与成果输入关系按精确 ID 联查；严格 DTO/同 Workspace IPC/Preload/Hook/详情来源页；配置变更和最新版本不漂移，搜索不算正文读取，跨范围引用拒绝，响应不含正文/路径/fileKey/locator/endpoint。Schema 与读取判定反例红→绿；定向 6 文件/486 项、typecheck 通过；最终 check:quick 退出 0（docs 156、functional 196/3174、动态消费者 2/281、heavy 6/215；差异覆盖 359/447=80.31%）；迁移仍 v49，真实 UI/模型未验，详见 2026-10-17 日志 |
+| AT15 | 双来源执行树与时间轴 | AT14 | M2 | done | Core/Host 保留各自原序号，按显式关联建树、稳定复合游标分页并合并最小诊断失效推送；运行详情提供键盘可读时间轴与文本替代。修复 ContextPanel 假 API 缺失订阅方法；8 个定向文件/530 项、ContextPanel 33 项通过；最终 check:quick 退出 0（functional 198/3341、动态消费者 2/281、heavy 6/215；差异覆盖 537/631=85.10%）；无新迁移，仍 v49；真实 UI/模型未验，详见 2026-10-17 日志 |
+| AT16 | 观测故障、中断与恢复回归 | AT15 | M2 | done | 补测验证 Recorder 写入失败不改变成功/取消终态、业务 Journal 拒绝事件不派发且失败只收口一次；临时文件 SQLite 重开后启动恢复仅追加一个根失败终态，未闭合 Host 节点为 interrupted 且无结束时间/耗时，不触发 Provider 重跑。定向 lifecycle 35 项、RunService AT10 恢复 1 项及完整 check:quick 通过（functional 198/3342、动态消费者 2/281、heavy 6/215；差异覆盖 537/631=85.10%）；无新迁移，仍 v49；未强杀进程/操作用户库/验真实 UI 或模型，详见 2026-10-17 日志 |
+| AT17 | 统计筛选与确定性聚合 | AT16 | M3 | done | 闭区间 `runs.created_at` 与精确 Run 快照筛选；游标绑定 Workspace/筛选，聚合跨全部匹配 Run。失败分母仅 completed+failed，token 保留 0/未知，工具执行失败/拒绝分开，模型调用单调耗时 nearest-rank。定向 4 文件/474 项通过；check:quick 退出 0（docs 156、functional 198/3345、动态消费者 2/282、heavy 6/215；覆盖 634/729=86.97%）；无新迁移，v49，详见 2026-10-17 日志 |
+| AT18 | 执行记录筛选与统计呈现 | AT17 | M3 | done | 详情内接入任务/Workspace、日期、固定修订与模型指纹筛选；统计覆盖全部匹配 Run、显示失败分母、完整性、token 已知/未知调用、耗时样本与排除数；迟到筛选响应丢弃，可分页并返回具体 Run。定向 React 15 项通过；关闭请求世代校验的变异测试红 1、恢复后绿；check:quick 退出 0（docs 156、functional 2 文件/48 项、heavy App 56 项；差异覆盖 102/114=89.47%）；无迁移，v49，真实 UI 留 AT23，详见 2026-10-17 日志 |
+| AT19 | 用户问题标记 | AT18 | M3 | done | v50 追加每 Run 单标记表，CAS revision 防并发覆盖并随 Run 级联删除；Main 验证 Workspace/Task/Run 归属，节点必须属于该 Run。协议/IPC/Preload/Hook/执行链分类与节点选择已接通；保存失败保留草稿，成功/清除各只有一枚局部 TransientToast。跨层定向 6 文件/560 项通过；check:quick 退出 0（docs 156、functional 197/3195、动态消费者 2/285、heavy 6/215；覆盖 119/124=95.97%）。修复协议测试既有嵌套用例收集错误；不含自由文本/Memory，真实 Electron UI 留 AT23，详见 2026-10-17 日志 |
+| AT20 | 本地脱敏 JSON 诊断包 | AT19 | M3 | done | `schemaVersion: 1` 严格白名单包；Main 在同一 AppStore 事务验证范围并取 Run、完整诊断投影、来源与问题标记；UTF-8 5 MiB 超限拒绝、保存对话框取消静默、权限 0600、写失败可重试，结果不回传路径。协议最小用例先红后绿；服务/IPC/Preload/详情页覆盖密钥、prompt、reasoning、嵌套工具输出、路径脱敏、错误范围与来源完整性降级。定向跨层 5 文件/495 项通过；最终 check:quick 退出 0（docs 156、functional 198 文件/3203 项、动态消费者 1/221、heavy 6/215；覆盖 115/138=83.33%）。迁移仍 v50；未连接远端、未调用模型，真实 Electron UI 留 AT23，详见 2026-10-17 日志 |
+| AT21 | 固定合成样本与版本比较 | AT20 | M4 | done | 9 类固定事件样本逐场景新建内存 SQLite/Run；比较输入/配置修订、Run ID、期望与生产仓储观测，9/9 匹配，业务质量明确未验。比较器反例红 1 项失败、修复后定向绿 2 项；`check:quick -- --base 44709041` 退出 0（lint、format、typecheck、docs 156、functional 1 文件/2 项、heavy 无差异用例）；无迁移。详见 [AT21 离线样本报告](execution-tracing-quality-sample-v1.md) 与 2026-10-17 日志 |
+| AT22 | 离线总收口与人工验收清单 | AT21 | M4 | done | 核对 AT01–AT21 提交、当前分支/HEAD、v50 与 Main 生产装配；帮助 §8.3 补当前/历史入口和筛选、标记、导出说明。离线回归：11 文件/540 项、RunService/SQLite 跨层 1 项、App 回答保存 2 项均通过；`check:quick -- --base 2e57b337` 退出 0（本卡仅文档差异，docs 156）。人工清单已写入但待人执行；UI、真实模型、安装、性能未验；详见日志 |
+| AT23 | 真实 UI 专项与人工走查 | AT22 | 独立 | doing | 用户已安排本轮继续 AT11–AT25；`--diagnostics-only` 覆盖青玉明/暗 × 760/1380 × 普通/减动效 8 组，验证实时宿主阶段、长双语载荷无横向溢出、问题标记失败保留后重试、导出取消、工作空间筛选、失败/停止 Run 回看、Tab/Esc 焦点归还及 reasoning 不显示；专项 8 组、全量 `ui:check` 82 组和 app-only 1 组通过，真实 App/Preload/IPC/临时 SQLite 重开旅程 17 步与进程恢复通过。`check:quick -- --base 18daa331` 退出 0（lint、format、typecheck、docs 156；无匹配 Vitest 用例，页面行为由独立 UI 门禁覆盖）。AI 截图走查读数正文最小 12px、无横向溢出，未发现页面缺陷；截图在 `/tmp/betterwork-at23-fullui.Eg4foa` 与 `/tmp/betterwork-at23-appfinal.n0Rb7s`。实际人工验收仍待填写，不代签 |
 | AT24 | 真实模型语义与业务验收 | AT22 | 独立 | todo | 待模型配置/预算授权，未计入离线目标 |
-| AT25 | 固定版本 OTel/OTLP 出口 | AT22 | 可选 | todo | 尚未授权扩展；不是本地主链路前置 |
+| AT25 | 固定版本 OTel/OTLP 出口 | AT22 | 可选 | todo | 用户于 2026-10-17 明确决定本轮跳过；未实施且未授权对外发送。状态保留 todo，OTLP 不是本地主链路前置 |
 
 ## 3. 所有代码卡共同执行
 
@@ -207,6 +207,7 @@
 - 范围：Workspace 内按 Task、时间窗、精确专家/技能修订、模型指纹过滤；同一筛选返回列表和统计；有实际消费者地增加 DTO/IPC/Preload 查询。
 - 反例/验收：取消/运行中不混失败分母、局部失败后 Run 成功、0 与未知用量、tool-only、父子用量去重、nearest-rank p50/p95、空样本/缺版本、跨范围游标；结果能追到 Run。
 - 验证/停点：固定数值合成样本独立计算期望值、查询/IPC 测试及快检；不建后台采样器/价格表/预聚合真相库。
+- 实施口径：创建时间窗按 `runs.created_at` 闭区间；仅查 Run 固定的 Expert/Skill 修订与请求准备时模型指纹，游标绑定 Workspace 和完整筛选；统计跨全部匹配样本。耗时只聚合模型节点实际记录的单调 `durationMs`，pending/running/interrupted/unknown/缺测分别列出排除数。
 
 ### AT18：执行记录筛选与统计呈现
 
@@ -244,6 +245,23 @@
 - 范围：核对全部代码卡、当前 HEAD/迁移与生产装配；更新现有文档/帮助中的实际入口，生成本任务板内的人工验收步骤与未验项，不另造状态板。
 - 验收：覆盖“发送→查看模型/工具→历史恢复→宿主阶段→精确来源→筛选→标记→导出”的离线集成；现有回答保存、来源隔离、取消/终态不回退；快检成功，日志/中文回读/差异与敏感内容检查齐全。
 - 验证/停点：最后一个基于准确当前快照的 check:quick 结果与必要跨层回归。未运行的 UI、真实模型、安装、性能专项明确列出；不能自动跑完整 verify。授权 AT01–AT22 的目标在这里完成，不等待 AT23–AT25，也不将它们标 done。
+
+#### AT22 人工验收清单（待人工执行）
+
+以下步骤用于后续在隔离验收数据中逐项填写“实际结果”；当前表格不表示人工验收已执行或通过。使用确定性 Provider 替身和临时 Workspace/Task/材料，不调用真实模型或外部工具。
+
+| 步骤 | 动作 | 预期 | 实际结果 |
+| --- | --- | --- | --- |
+| 1. 提交与回答 | 在隔离验收宿主通过正常工作页入口提交合成任务，等待完成并查看回答 | 新 Run 有唯一终态；回答按原消息/成果入口查看，不展示 reasoning | 待人工填写 |
+| 2. 执行链与宿主阶段 | 从当前摘要打开“执行详情”，查看模型、工具与 prepare/audit/清理/提交阶段 | 调用关联、实际执行与拒绝分开；失败/取消不伪装成功；未测耗时不补数 | 待人工填写 |
+| 3. 历史恢复 | 展开“过程 → 执行记录”，打开已完成、失败和取消的历史 Run | Run 身份、消息、终态与既有成果不变；打开历史项不创建新 Run 或重放 Provider | 待人工填写 |
+| 4. 精确来源 | 在“工作依据”核对固定 Expert/Skill/model、材料修订、读取足迹和 Artifact 输入关系 | 展示精确修订；已选材料与实际读取分开；不以当前配置替代缺失历史，不泄露正文/路径 | 待人工填写 |
+| 5. 筛选与统计 | 在“记录与统计”切换工作空间/任务、日期、修订和模型指纹，打开匹配项 | 列表与全样本统计同筛选；未知值与缺失记录保持可见；具体 Run 可再打开 | 待人工填写 |
+| 6. 问题标记 | 在执行链设定类别、关联同 Run 节点、保存后回看并清除 | 标记可回看且只保留当前一条；保存/清除不改变 Run、来源或成果 | 待人工填写 |
+| 7. 诊断包 | 导出到临时目录，查看 JSON 版本和白名单字段；另试保存取消 | `schemaVersion` 与受控元数据齐全；不含 prompt、消息/工具正文、reasoning、路径或凭据；取消不落文件 | 待人工填写 |
+| 8. 保存成果与隔离 | 将已完成回答按现有入口保存为新版本，并检查其他 Task/Workspace 的记录 | 新版本关联正确来源 Run；失败/取消 Run 不回退终态；跨范围 ID 不暴露其他对象 | 待人工填写 |
+
+**尚未取得的验收证据：**真实 Electron UI/视觉与键盘焦点走查（AT23）；真实模型语义、用量和内容质量（AT24）；签名安装包/安装运行；性能专项与 bench；人工表格实际结果。未运行完整 `npm run verify`。ADR-0050 仍为 Proposed。AT23–AT25 状态保持独立，不因 AT22 收口而标 done。
 
 ### AT23：真实 UI 专项与人工走查（单独指派）
 

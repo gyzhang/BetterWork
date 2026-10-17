@@ -87,6 +87,7 @@ const invoke = async (channel: string, raw: unknown): Promise<unknown> => {
 /** 推送通道由主进程主动 send，不经 ipcMain.handle 注册。 */
 const PUSH_ONLY_CHANNELS = new Set<string>([
   IpcChannel.RunEvent,
+  IpcChannel.RunDiagnosticsChanged,
   IpcChannel.NotificationChangeEvent,
   IpcChannel.NotificationActivated,
   IpcChannel.KnowledgeJobEvent,
@@ -291,6 +292,7 @@ describe('registerIpc', () => {
       dependencyLocksRoot: locksRoot,
       getWindow: () => null,
       getDefaultWorkspaceRoot: () => temporaryDirectory,
+      getApplicationVersion: () => '1.2.3',
     });
     fileArtifactSourcePath = path.join(temporaryDirectory, 'file-export-source.pptx');
   });
@@ -1311,10 +1313,90 @@ describe('registerIpc', () => {
     });
     const scopeA = { workspaceId: workspaceA.id, taskId: taskA.task.id, runId: runA };
 
+    await expect(invoke(IpcChannel.GetRunDiagnosticIssueMark, scopeA)).resolves.toBeNull();
+    await expect(
+      invoke(IpcChannel.SetRunDiagnosticIssueMark, {
+        ...scopeA,
+        expectedRevision: null,
+        category: 'tool',
+        diagnosticNodeId: 'tool:ipc-tool-a',
+      }),
+    ).resolves.toMatchObject({
+      runId: runA,
+      category: 'tool',
+      diagnosticNodeId: 'tool:ipc-tool-a',
+      revision: 1,
+    });
+    mocks.showSaveDialog.mockResolvedValueOnce({ canceled: true, filePath: '' });
+    await expect(invoke(IpcChannel.ExportRunDiagnosticPackage, scopeA)).resolves.toEqual({
+      cancelled: true,
+    });
+
+    const failedTarget = path.join(temporaryDirectory, 'missing-export-folder', 'diagnostics.json');
+    mocks.showSaveDialog.mockResolvedValueOnce({ canceled: false, filePath: failedTarget });
+    await expect(invoke(IpcChannel.ExportRunDiagnosticPackage, scopeA)).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
+
+    const exportTarget = path.join(temporaryDirectory, 'run-diagnostics-export.json');
+    mocks.showSaveDialog.mockResolvedValueOnce({ canceled: false, filePath: exportTarget });
+    await expect(invoke(IpcChannel.ExportRunDiagnosticPackage, scopeA)).resolves.toMatchObject({
+      cancelled: false,
+      byteLength: expect.any(Number),
+    });
+    const exportedPackage = await readFile(exportTarget, 'utf8');
+    expect(exportedPackage).toContain('ipc-diagnostics-run-a');
+    expect(exportedPackage).toContain('1.2.3');
+    expect(exportedPackage).not.toContain('synthetic prompt');
+    expect(exportedPackage).not.toContain(temporaryDirectory);
+
+    const savesBeforeWrongScope = mocks.showSaveDialog.mock.calls.length;
+    await expect(
+      invoke(IpcChannel.ExportRunDiagnosticPackage, { ...scopeA, taskId: taskB.task.id }),
+    ).rejects.toMatchObject({ name: 'RunDiagnosticPackageScopeError' });
+    expect(mocks.showSaveDialog).toHaveBeenCalledTimes(savesBeforeWrongScope);
+
+    await expect(
+      invoke(IpcChannel.SetRunDiagnosticIssueMark, {
+        ...scopeA,
+        expectedRevision: null,
+        category: 'model',
+      }),
+    ).rejects.toMatchObject({ name: 'RunDiagnosticIssueMarkConflictError' });
+    await expect(
+      invoke(IpcChannel.SetRunDiagnosticIssueMark, {
+        ...scopeA,
+        expectedRevision: 1,
+        category: 'model',
+        diagnosticNodeId: 'tool:ipc-tool-b',
+      }),
+    ).rejects.toMatchObject({ name: 'RunDiagnosticIssueMarkNodeError' });
+    await expect(
+      invoke(IpcChannel.SetRunDiagnosticIssueMark, {
+        ...scopeA,
+        expectedRevision: 1,
+        category: null,
+      }),
+    ).resolves.toBeNull();
+    await expect(invoke(IpcChannel.GetRunDiagnosticIssueMark, scopeA)).resolves.toBeNull();
+    await expect(
+      invoke(IpcChannel.SetRunDiagnosticIssueMark, {
+        ...scopeA,
+        taskId: taskB.task.id,
+        expectedRevision: null,
+        category: 'other',
+      }),
+    ).rejects.toMatchObject({ name: 'RunDiagnosticIssueMarkScopeError' });
+
     await expect(invoke(IpcChannel.GetRunDiagnosticsSummary, scopeA)).resolves.toMatchObject({
       runId: runA,
       taskId: taskA.task.id,
       modelCallCount: 1,
+    });
+    await expect(invoke(IpcChannel.GetRunDiagnosticsSources, scopeA)).resolves.toMatchObject({
+      runId: runA,
+      integrity: 'unavailable',
+      fixedContext: { state: 'not-recorded' },
     });
     const page = await invoke(IpcChannel.ListRunDiagnosticsPage, scopeA);
     expect(page).toMatchObject({
@@ -1326,6 +1408,29 @@ describe('registerIpc', () => {
       ],
     });
     await expect(
+      invoke(IpcChannel.ListRunDiagnosticsHistory, {
+        workspaceId: workspaceA.id,
+        filter: { fromCreatedAt: 10, throughCreatedAt: 10 },
+      }),
+    ).resolves.toMatchObject({
+      runs: [{ summary: { runId: runA, taskId: taskA.task.id } }],
+      stats: {
+        runCount: 1,
+        statusCounts: { running: 1 },
+        runFailure: {
+          denominatorRunCount: 0,
+          excludedRunningRunCount: 1,
+          rate: null,
+        },
+      },
+    });
+    await expect(
+      invoke(IpcChannel.ListRunDiagnosticsHistory, {
+        workspaceId: workspaceA.id,
+        filter: { taskId: taskB.task.id },
+      }),
+    ).resolves.toMatchObject({ runs: [], stats: { runCount: 0 } });
+    await expect(
       invoke(IpcChannel.GetRunDiagnosticNodeDetail, { ...scopeA, nodeId: 'tool:ipc-tool-a' }),
     ).resolves.toMatchObject({ runId: runA, nodeId: 'tool:ipc-tool-a', truncated: false });
     await expect(
@@ -1335,6 +1440,12 @@ describe('registerIpc', () => {
       invoke(IpcChannel.GetRunDiagnosticsSummary, {
         ...scopeA,
         taskId: taskB.task.id,
+      }),
+    ).resolves.toBeNull();
+    await expect(
+      invoke(IpcChannel.GetRunDiagnosticsSources, {
+        ...scopeA,
+        workspaceId: workspaceB.id,
       }),
     ).resolves.toBeNull();
     await expect(
@@ -1355,6 +1466,7 @@ describe('registerIpc', () => {
         cursor: {
           runId: 'other-run',
           source: 'core-journal',
+          afterAt: 1,
           afterSequence: 1,
           afterKind: 'tool',
           afterNodeId: 'tool:ipc-tool-a',

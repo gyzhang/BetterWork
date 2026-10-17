@@ -2,6 +2,7 @@ import type { AgentRuntimeEvent, RunDiagnosticNode } from '@betterwork/agent-pro
 import { describe, expect, it } from 'vitest';
 
 import {
+  buildRunDiagnosticTree,
   hasRunEventSequenceGap,
   isRunDiagnosticsRelevantEvent,
   mergeRunDiagnosticNodes,
@@ -78,6 +79,64 @@ describe('run diagnostics merge helpers', () => {
       ['tool-a', 'running'],
       ['legacy', 'running'],
     ]);
+  });
+
+  it('sorts two sources by known wall time without combining their sequences', () => {
+    const core = {
+      ...node('tool:core', 'tool', 40),
+      occurredAt: 100,
+    };
+    const host = {
+      ...node('host:phase', 'host', 0),
+      sourceKind: 'host-diagnostic' as const,
+      occurredAt: 100,
+      operationId: 'phase',
+      hostKind: 'skill-host' as const,
+      hostPhase: 'execute' as const,
+    };
+    const later = { ...node('model:later', 'model', 1), occurredAt: 120 };
+
+    expect(mergeRunDiagnosticNodes([], [later, host, core]).map(({ id }) => id)).toEqual([
+      'tool:core',
+      'host:phase',
+      'model:later',
+    ]);
+  });
+
+  it('builds only explicit parent links and keeps orphaned or cyclic nodes reachable', () => {
+    const root = { ...node('tool:root', 'tool', 0), occurredAt: 100 };
+    const child = {
+      ...node('host:child', 'host', 0),
+      sourceKind: 'host-diagnostic' as const,
+      occurredAt: 105,
+      parentId: root.id,
+      operationId: 'child',
+      hostKind: 'skill-host' as const,
+      hostPhase: 'execute' as const,
+    };
+    const orphan = {
+      ...node('host:orphan', 'host', 1),
+      sourceKind: 'host-diagnostic' as const,
+      occurredAt: 110,
+      parentId: 'host:missing',
+      operationId: 'orphan',
+      hostKind: 'run-host' as const,
+      hostPhase: 'audit' as const,
+    };
+    const cyclicA = { ...orphan, id: 'host:a', parentId: 'host:b', operationId: 'a' };
+    const cyclicB = { ...orphan, id: 'host:b', parentId: 'host:a', operationId: 'b' };
+    const tree = buildRunDiagnosticTree([child, cyclicA, root, orphan, cyclicB]);
+
+    expect(tree.map(({ node: item }) => item.id)).toEqual([
+      'tool:root',
+      'host:a',
+      'host:b',
+      'host:orphan',
+    ]);
+    expect(tree[0]?.children[0]?.node.id).toBe('host:child');
+    expect(tree[1]?.unresolvedParent).toBe(true);
+    expect(tree[2]?.unresolvedParent).toBe(true);
+    expect(tree[3]?.unresolvedParent).toBe(true);
   });
 
   it('detects a missing sequence after unordered or duplicate event acknowledgements', () => {

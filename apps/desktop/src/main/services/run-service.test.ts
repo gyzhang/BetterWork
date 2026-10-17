@@ -14,8 +14,8 @@ import type {
   ScheduleConfigDraft,
   ScheduleSourceItem,
 } from '@betterwork/agent-protocol';
-import { countCodePoints, IpcChannel } from '@betterwork/agent-protocol';
-import type { WebFetch } from '@betterwork/tool-runtime';
+import { agentRuntimeEventSchema, countCodePoints, IpcChannel } from '@betterwork/agent-protocol';
+import type { ArtifactRegisterInput, WebFetch } from '@betterwork/tool-runtime';
 import type Database from 'better-sqlite3';
 import type { BrowserWindow } from 'electron';
 import ExcelJS from 'exceljs';
@@ -34,6 +34,7 @@ import { McpClientService } from './mcp-client-service';
 import { mcpModelAlias } from './mcp-tool-contract';
 import { MemoryService } from './memory-service';
 import { NotificationService } from './notification-service';
+import { RunHostDiagnosticRecorder } from './run-host-diagnostic-recorder';
 import { createRunService, RunService, type RunServiceDependencies } from './run-service';
 import { createRunTools } from './run-tool-context';
 import { ScheduleExecutionService } from './schedule-execution-service';
@@ -300,12 +301,14 @@ const createPreparedScheduleDraft = (fixture: Fixture) => {
 interface ServiceOptions {
   window?: WindowStub;
   skillExecutionService?: SkillExecutionService;
+  fileArtifactService?: NonNullable<RunServiceDependencies['fileArtifactService']>;
   webFetch?: WebFetch;
   officeParser?: OfficeParserService;
   mcpClientService?: McpClientService;
   credentialAccess?: CredentialResolver;
   documentExtractor?: DocumentExtractor;
   onScheduledRunTerminal?: (runId: string) => Promise<unknown>;
+  runHostDiagnosticRecorder?: RunHostDiagnosticRecorder;
 }
 
 const createServiceDependencies = (
@@ -345,6 +348,7 @@ const createServiceDependencies = (
   ...(options.skillExecutionService
     ? { skillExecutionService: options.skillExecutionService }
     : {}),
+  ...(options.fileArtifactService ? { fileArtifactService: options.fileArtifactService } : {}),
   ...(options.webFetch ? { webFetch: options.webFetch } : {}),
   ...(options.officeParser ? { officeParser: options.officeParser } : {}),
   ...(options.mcpClientService ? { mcpClientService: options.mcpClientService } : {}),
@@ -353,6 +357,9 @@ const createServiceDependencies = (
   ...(options.onScheduledRunTerminal
     ? { onScheduledRunTerminal: options.onScheduledRunTerminal }
     : {}),
+  runHostDiagnosticRecorder:
+    options.runHostDiagnosticRecorder ??
+    new RunHostDiagnosticRecorder(fixture.store.runHostDiagnostics),
 });
 
 const createService = (fixture: Fixture, options: ServiceOptions = {}): RunService =>
@@ -539,8 +546,56 @@ describe('RunService', () => {
           'SELECT diagnostics_recording_version, diagnostics_sections_json FROM runs WHERE id = ?',
         )
         .get(runId),
-    ).toEqual({ diagnostics_recording_version: 1, diagnostics_sections_json: '["core"]' });
+    ).toEqual({ diagnostics_recording_version: 2, diagnostics_sections_json: '["core","host"]' });
     await waitForCompletion(fixture, runId);
+  });
+
+  it('records prepare, audit, and artifact commit around the existing RunService lifecycle', async () => {
+    const fixture = await createFixture();
+    const service = createService(fixture);
+    const runId = service.start({
+      taskId: fixture.taskId,
+      sessionId: fixture.sessionId,
+      prompt: '离线核对宿主阶段观测',
+    });
+
+    await waitForCompletion(fixture, runId);
+
+    expect(
+      fixture.store.runHostDiagnostics.listByRun(runId).map(({ phase, state }) => [phase, state]),
+    ).toEqual([
+      ['prepare', 'started'],
+      ['prepare', 'completed'],
+      ['audit', 'started'],
+      ['audit', 'completed'],
+      ['artifact-commit', 'started'],
+      ['artifact-commit', 'completed'],
+    ]);
+    expect(statusOf(fixture, runId)).toBe('completed');
+  });
+
+  it('records a failed prepare while preserving its existing failed terminal', async () => {
+    const fixture = await createFixture();
+    const service = createService(fixture);
+    vi.spyOn(fixture.store.taskContinuity, 'prepareRunContext').mockImplementation(() => {
+      throw new Error('synthetic continuity prepare failure');
+    });
+
+    const runId = service.start({
+      taskId: fixture.taskId,
+      sessionId: fixture.sessionId,
+      prompt: '触发准备失败收口',
+    });
+
+    expect(statusOf(fixture, runId)).toBe('failed');
+    expect(fixture.store.runHostDiagnostics.listByRun(runId)).toMatchObject([
+      { phase: 'prepare', state: 'started' },
+      { phase: 'prepare', state: 'failed', errorCode: 'prepare-failed' },
+    ]);
+    expect(fixture.store.runs.listEvents(runId).at(-1)).toMatchObject({
+      type: 'run.failed',
+      error: 'Task Continuity 简报准备失败：synthetic continuity prepare failure',
+    });
   });
 
   it('rolls back the Run and its diagnostics marker when the same creation transaction fails', async () => {
@@ -5084,7 +5139,7 @@ describe('RunService', () => {
     },
   );
 
-  it.each(['succeeded', 'failed', 'timed-out', 'cancelled'] as const)(
+  it.each(['succeeded', 'failed', 'timed-out', 'cancelled', 'spawn-failed'] as const)(
     'bridges a registered Skill command with a %s result and a clean managed environment',
     async (outcome) => {
       const fixture = await createFixture();
@@ -5105,9 +5160,9 @@ describe('RunService', () => {
         ],
         environmentRequirements: [],
       });
-      const launch: ProcessSupervisor['launch'] = vi.fn(async (spec) => ({
-        executionId: spec.executionId,
-        result: Promise.resolve(
+      const launch: ProcessSupervisor['launch'] = vi.fn(async (spec) => {
+        if (outcome === 'spawn-failed') throw new Error('synthetic spawn failure');
+        const result =
           outcome === 'succeeded'
             ? {
                 kind: 'succeeded' as const,
@@ -5124,23 +5179,35 @@ describe('RunService', () => {
                   summary: 'synthetic',
                   retryable: false,
                 }
-              : { kind: outcome, cleanupCompleted: true, diagnosticOutputIds: [] },
-        ),
-        capture: () => ({
-          stdout: 'synthetic stdout',
-          stderr: 'synthetic stderr',
-          truncated: false,
-          receivedBytes: 32,
-          droppedBytes: 0,
-        }),
-        cancel: async () => ({ cleanupCompleted: true }),
-      }));
-      const execution = new SkillExecutionService(fixture.store, { launch });
+              : { kind: outcome, cleanupCompleted: true, diagnosticOutputIds: [] };
+        return {
+          executionId: spec.executionId,
+          result: Promise.resolve(result),
+          capture: () => ({
+            stdout: 'synthetic stdout',
+            stderr: 'synthetic stderr',
+            truncated: false,
+            receivedBytes: 32,
+            droppedBytes: 0,
+          }),
+          cancel: async () => ({ cleanupCompleted: true }),
+        };
+      });
+      const hostDiagnostics = new RunHostDiagnosticRecorder(fixture.store.runHostDiagnostics);
+      const execution = new SkillExecutionService(
+        fixture.store,
+        { launch },
+        undefined,
+        hostDiagnostics,
+      );
       const dependencies = {
         resolveEnvironmentPython: vi.fn(() => '/managed/python'),
       } as unknown as NonNullable<RunServiceDependencies['dependencies']>;
       const service = new RunService({
-        ...createServiceDependencies(fixture, { skillExecutionService: execution }),
+        ...createServiceDependencies(fixture, {
+          skillExecutionService: execution,
+          runHostDiagnosticRecorder: hostDiagnostics,
+        }),
         dependencies,
       });
       let runId = '';
@@ -5187,16 +5254,92 @@ describe('RunService', () => {
           PYTHONUNBUFFERED: '1',
           PYTHONNOUSERSITE: '1',
         });
-        const completed = fixture.store.runs
-          .listEvents(runId)
-          .find((event) => event.type === 'tool.completed');
-        expect(completed?.type === 'tool.completed' ? completed.output : undefined).toMatchObject({
-          status: outcome,
-          stdout: 'synthetic stdout',
-          stderr: 'synthetic stderr',
+        const events = fixture.store.runs.listEvents(runId);
+        const completed = events.find((event) => event.type === 'tool.completed');
+        if (outcome === 'spawn-failed') {
+          expect(events.some((event) => event.type === 'tool.failed')).toBe(true);
+        } else {
+          expect(completed?.type === 'tool.completed' ? completed.output : undefined).toMatchObject(
+            {
+              status: outcome,
+              stdout: 'synthetic stdout',
+              stderr: 'synthetic stderr',
+            },
+          );
+        }
+        const scriptExecution = fixture.store.executions.listExecutionsByRun(runId)[0];
+        expect(scriptExecution?.status).toBe(outcome === 'spawn-failed' ? 'failed' : outcome);
+        const hostEvents = fixture.store.runHostDiagnostics.listByRun(runId);
+        const dispatchTerminal = hostEvents.find(
+          (event) => event.phase === 'dispatch' && event.state !== 'started',
+        );
+        expect(dispatchTerminal).toMatchObject({
+          kind: 'skill-host',
+          phase: 'dispatch',
+          toolCallId: scriptExecution?.toolCallId,
+          state: outcome === 'spawn-failed' ? 'failed' : 'completed',
+          ...(outcome === 'spawn-failed' ? { errorCode: 'dispatch-failed' } : {}),
         });
-        expect(fixture.store.executions.listExecutionsByRun(runId)[0]?.status).toBe(outcome);
+        if (outcome === 'spawn-failed') {
+          expect(hostEvents.some((event) => event.phase === 'execute')).toBe(false);
+        } else {
+          expect(
+            hostEvents.find((event) => event.phase === 'execute' && event.state !== 'started'),
+          ).toMatchObject({
+            executionId: scriptExecution?.id,
+            toolCallId: scriptExecution?.toolCallId,
+            parentOperationId: dispatchTerminal?.operationId,
+            state:
+              outcome === 'succeeded'
+                ? 'completed'
+                : outcome === 'cancelled'
+                  ? 'cancelled'
+                  : 'failed',
+          });
+        }
         expect(statusOf(fixture, runId)).toBe('completed');
+        if (outcome === 'succeeded' && scriptExecution) {
+          const publish = vi.fn(async () => {
+            throw new Error('private publish failure');
+          });
+          const publishService = new RunService(
+            createServiceDependencies(fixture, {
+              fileArtifactService: { register: publish } as unknown as NonNullable<
+                RunServiceDependencies['fileArtifactService']
+              >,
+              runHostDiagnosticRecorder: hostDiagnostics,
+            }),
+          );
+          const register = (
+            publishService as unknown as {
+              registerFileArtifact: (
+                targetRunId: string,
+                input: ArtifactRegisterInput,
+              ) => Promise<unknown>;
+            }
+          ).registerFileArtifact.bind(publishService);
+          await expect(
+            register(runId, {
+              runId,
+              executionId: scriptExecution.id,
+              outputId: 'synthetic-output',
+              title: 'Synthetic deck',
+            }),
+          ).rejects.toThrow('private publish failure');
+          expect(publish).toHaveBeenCalledOnce();
+          expect(fixture.store.runHostDiagnostics.listByRun(runId)).toEqual(
+            expect.arrayContaining([
+              expect.objectContaining({
+                kind: 'skill-host',
+                phase: 'publish',
+                state: 'failed',
+                errorCode: 'publish-failed',
+                executionId: scriptExecution.id,
+                toolCallId: scriptExecution.toolCallId,
+              }),
+            ]),
+          );
+        }
       } finally {
         restore();
         await service.shutdown();
@@ -5413,6 +5556,12 @@ describe('RunService robustness regressions', () => {
       expect(accepted).toEqual([false]);
       expect(statusOf(fixture, runId)).toBe('completed');
       expect(fixture.store.artifacts.list(fixture.taskId)).toHaveLength(1);
+      expect(
+        fixture.store.runHostDiagnostics
+          .listByRun(runId)
+          .filter((event) => event.phase === 'artifact-commit')
+          .map(({ state }) => state),
+      ).toEqual(['started', 'completed']);
     } finally {
       await service.shutdown();
     }
@@ -5524,6 +5673,40 @@ describe('AT10 离线跨层执行追踪', () => {
       });
       expect(fixture.store.runs.failInterruptedRuns('合成旧 Run 中断', Date.now())).toBe(1);
 
+      const interruptedHostRunId = 'at16-interrupted-host-run';
+      fixture.store.runs.create(
+        {
+          id: interruptedHostRunId,
+          taskId: fixture.taskId,
+          sessionId: fixture.sessionId,
+          prompt: '合成重启时未闭合的宿主阶段',
+          status: 'running',
+          createdAt: Date.now() - 2_000,
+        },
+        { version: 2, sections: ['core', 'host'] },
+      );
+      fixture.store.runs.appendEvent(
+        agentRuntimeEventSchema.parse({
+          id: 'at16-interrupted-host-run-started',
+          runId: interruptedHostRunId,
+          sequence: 0,
+          createdAt: Date.now() - 2_000,
+          type: 'run.started',
+          taskId: fixture.taskId,
+          sessionId: fixture.sessionId,
+        }),
+      );
+      fixture.store.runHostDiagnostics.append({
+        id: 'at16-interrupted-host-operation-started',
+        runId: interruptedHostRunId,
+        operationId: 'at16-interrupted-host-operation',
+        kind: 'run-host',
+        phase: 'skill-cleanup',
+        state: 'started',
+        createdAt: Date.now() - 1_900,
+      });
+      const providerCallsBeforeRecovery = providerSpy.mock.calls.length;
+
       const existingArtifactVersion = fixture.store.artifacts.listVersions(existingArtifact.id)[0];
       if (!existingArtifactVersion) throw new Error('existing artifact version missing');
       expect(fixture.store.artifacts.getVersionDetail(existingArtifactVersion.id)).toMatchObject({
@@ -5543,12 +5726,35 @@ describe('AT10 离线跨层执行追踪', () => {
       fixture.store = AppStore.open(fixture.databasePath);
       openStores.push(fixture.store);
 
+      expect(fixture.store.runs.failInterruptedRuns('AT16 合成启动恢复', Date.now())).toBe(1);
+      expect(fixture.store.runs.failInterruptedRuns('不得重复收口', Date.now())).toBe(0);
+      expect(providerSpy).toHaveBeenCalledTimes(providerCallsBeforeRecovery);
+      expect(
+        fixture.store.runs.listEvents(interruptedHostRunId).map((event) => event.type),
+      ).toEqual(['run.started', 'run.failed']);
+      const recoveredPage = fixture.store.runDiagnostics.getPage({ runId: interruptedHostRunId });
+      expect(recoveredPage).toMatchObject({
+        integrity: 'partial',
+        summary: { status: 'failed' },
+      });
+      const recoveredHostNode = recoveredPage?.nodes.find(
+        (node) => node.id === 'host:at16-interrupted-host-operation',
+      );
+      expect(recoveredHostNode).toMatchObject({
+        kind: 'host',
+        status: 'interrupted',
+        evidenceState: 'recorded',
+        sourceSequenceStart: 0,
+      });
+      expect(recoveredHostNode).not.toHaveProperty('endedAt');
+      expect(recoveredHostNode).not.toHaveProperty('durationMs');
+
       const completedPage = fixture.store.runDiagnostics.getPage({
         runId: completedRunId,
         pageSize: 20,
       });
       expect(completedPage).toMatchObject({
-        integrity: 'complete',
+        integrity: 'partial',
         summary: {
           status: 'completed',
           modelCallCount: 2,
@@ -5583,14 +5789,14 @@ describe('AT10 离线跨层执行追踪', () => {
       expect(completedPage).not.toHaveProperty('prompt');
       expect(fixture.store.runDiagnostics.getSummary(failedRunId)).toMatchObject({
         status: 'failed',
-        integrity: 'complete',
+        integrity: 'partial',
       });
       expect(fixture.store.runDiagnostics.getPage({ runId: failedRunId })?.nodes).toContainEqual(
         expect.objectContaining({ kind: 'model', status: 'failed' }),
       );
       expect(fixture.store.runDiagnostics.getSummary(cancelledRunId)).toMatchObject({
         status: 'cancelled',
-        integrity: 'complete',
+        integrity: 'partial',
       });
       expect(fixture.store.runDiagnostics.getPage({ runId: cancelledRunId })?.nodes).toContainEqual(
         expect.objectContaining({ kind: 'model', status: 'cancelled' }),

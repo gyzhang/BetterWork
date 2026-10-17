@@ -97,6 +97,13 @@ const INLINE_STYLE_OUTLETS: readonly InlineStyleOutlet[] = [
     reason: '菜单的动态定位与锚点计算字号，动态域布局类不放宽样式出口，行为契约已有测试',
   },
   {
+    file: 'apps/desktop/src/renderer/src/components/context/RunExecutionDetails.tsx',
+    tag: 'span',
+    attribute: 'style',
+    expression: '{ left: `${left}%`, width: `${width}%` }',
+    reason: '执行时间轴按 Run 内观测区间比例定位与缩放，不表达其他视觉属性',
+  },
+  {
     file: 'apps/desktop/src/renderer/src/components/Tooltip.tsx',
     tag: 'div',
     className: 'tooltip',

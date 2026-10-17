@@ -8,6 +8,7 @@ import {
   type ArtifactInputRelation,
   IpcChannel,
   type MaterialReference,
+  runDiagnosticsChangedEventSchema,
   type RunSummary,
   type ScheduleConfigDraft,
 } from '@betterwork/agent-protocol';
@@ -37,6 +38,7 @@ import { MemoryRecallService } from '../../apps/desktop/src/main/services/memory
 import { MemoryService } from '../../apps/desktop/src/main/services/memory-service';
 import { ModelProviderFactory } from '../../apps/desktop/src/main/services/model-provider-factory';
 import { NotificationService } from '../../apps/desktop/src/main/services/notification-service';
+import { RunHostDiagnosticRecorder } from '../../apps/desktop/src/main/services/run-host-diagnostic-recorder';
 import { RunService } from '../../apps/desktop/src/main/services/run-service';
 import { ScheduleDirectorySourcesService } from '../../apps/desktop/src/main/services/schedule-directory-sources';
 import { ScheduleKnowledgeSourcesService } from '../../apps/desktop/src/main/services/schedule-knowledge-sources';
@@ -127,6 +129,21 @@ export function assemble(
   });
   // 通知仍真实落库；合成宿主不发操作系统通知、不抢用户焦点。
   const notifications = new NotificationService(store.notifications, () => null);
+  const runHostDiagnosticRecorder = new RunHostDiagnosticRecorder(store.runHostDiagnostics, {
+    wallNow: () => Date.now(),
+    monotonicNow: () => performance.now(),
+    onRecorded: (event) => {
+      const window = getWindow();
+      if (!window || window.isDestroyed()) return;
+      window.webContents.send(
+        IpcChannel.RunDiagnosticsChanged,
+        runDiagnosticsChangedEventSchema.parse({
+          runId: event.runId,
+          cursor: { source: 'host-diagnostic', afterSequence: event.diagnosticSequence },
+        }),
+      );
+    },
+  });
   const runs = new RunService({
     store,
     knowledgeVault: vault,
@@ -136,6 +153,7 @@ export function assemble(
     inputSnapshots,
     taskMaterials,
     memoryExtractions: extractions,
+    runHostDiagnosticRecorder,
   });
   const filesystem = new FakeFileSystem();
   const processRunner = new FakePythonRunner(scenarioOf(), filesystem);

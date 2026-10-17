@@ -5,6 +5,7 @@ import path from 'node:path';
 import {
   IpcChannel,
   type KnowledgeJobSummary,
+  runDiagnosticsChangedEventSchema,
   type ScheduleChangedEvent,
   scheduleChangedEventSchema,
 } from '@betterwork/agent-protocol';
@@ -56,6 +57,7 @@ import { MemoryService } from './services/memory-service';
 import { ModelProviderFactory } from './services/model-provider-factory';
 import { NotificationActivationService } from './services/notification-activation-service';
 import { NotificationService } from './services/notification-service';
+import { RunHostDiagnosticRecorder } from './services/run-host-diagnostic-recorder';
 import { createRunService, type RunService } from './services/run-service';
 import { ScheduleDirectorySourcesService } from './services/schedule-directory-sources';
 import { ScheduleDispatchService } from './services/schedule-dispatch-service';
@@ -546,10 +548,23 @@ function bootstrap(initiallySuspended: boolean): ApplicationContext {
     createLogSink: (executionId) =>
       createExecutionLog(path.join(userData, 'execution-logs'), executionId),
   });
+  const runHostDiagnosticRecorder = new RunHostDiagnosticRecorder(store.runHostDiagnostics, {
+    wallNow: () => Date.now(),
+    monotonicNow: () => performance.now(),
+    onRecorded: (event) =>
+      getWindow()?.webContents.send(
+        IpcChannel.RunDiagnosticsChanged,
+        runDiagnosticsChangedEventSchema.parse({
+          runId: event.runId,
+          cursor: { source: 'host-diagnostic', afterSequence: event.diagnosticSequence },
+        }),
+      ),
+  });
   const skillExecutionService = new SkillExecutionService(
     store,
     supervisor,
     new ExecutionOutputService(),
+    runHostDiagnosticRecorder,
   );
   const interruptedExecutions = skillExecutionService.recoverInterruptedExecutions();
   if (interruptedExecutions > 0) {
@@ -653,6 +668,7 @@ function bootstrap(initiallySuspended: boolean): ApplicationContext {
     credentialAccess,
     knowledgeSearchService: knowledgeSearch,
     documentExtractor: knowledgeWorker.extractor,
+    runHostDiagnosticRecorder,
     onScheduledRunTerminal: (runId) => scheduleOutcomeService.finalizeRun(runId),
   });
   mcpClientService.setRunCanceller((runId) => {
@@ -746,6 +762,7 @@ function bootstrap(initiallySuspended: boolean): ApplicationContext {
     dependencyLocksRoot,
     getWindow,
     getDefaultWorkspaceRoot: () => defaultWorkspaceRoot,
+    getApplicationVersion: () => app.getVersion(),
     ...(credentialAccess ? { credentialAccess } : {}),
   });
   return started;

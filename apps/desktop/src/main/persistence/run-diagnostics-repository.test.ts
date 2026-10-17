@@ -1,5 +1,11 @@
-import type { AgentRuntimeEvent, RunDiagnosticsRecording } from '@betterwork/agent-protocol';
-import { agentRuntimeEventSchema } from '@betterwork/agent-protocol';
+import { createHash } from 'node:crypto';
+
+import type {
+  AgentRuntimeEvent,
+  RunDiagnosticsCursor,
+  RunDiagnosticsRecording,
+} from '@betterwork/agent-protocol';
+import { agentRuntimeEventSchema, memoryRecallPolicyV1 } from '@betterwork/agent-protocol';
 import type Database from 'better-sqlite3';
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -45,7 +51,455 @@ const event = (
     ...fields,
   });
 
+const hash = (value: string): string => createHash('sha256').update(value, 'utf8').digest('hex');
+
 describe('RunDiagnosticsRepository', () => {
+  it('filters exact Workspace history and aggregates fixed run, usage, and duration samples', () => {
+    const store = openStore();
+    const workspace = store.workspaces.getOrCreate('/tmp/diagnostic-history', 'history');
+    const runIds = ['history-a', 'history-b', 'history-c', 'history-d'] as const;
+    const contexts = new Map<string, { taskId: string; sessionId: string }>();
+    for (const [index, runId] of runIds.entries()) {
+      const task = store.tasks.create(workspace.id, `history-task-${index}`, 'history fixture');
+      const createdAt = (index + 1) * 1_000;
+      store.runs.create(
+        {
+          id: runId,
+          taskId: task.task.id,
+          sessionId: task.sessionId,
+          prompt: 'private history prompt',
+          status: 'running',
+          createdAt,
+        },
+        { version: 1, sections: ['core'] },
+      );
+      contexts.set(runId, { taskId: task.task.id, sessionId: task.sessionId });
+      store.runs.appendEvent(
+        event(runId, 0, {
+          type: 'run.started',
+          taskId: task.task.id,
+          sessionId: task.sessionId,
+          createdAt,
+        }),
+      );
+      store.runs.appendEvent(
+        event(runId, 1, {
+          type: 'model.started',
+          modelCallId: `model-${runId}`,
+          round: 0,
+          providerId: 'fixture',
+          messageCount: 1,
+          toolDefinitionCount: 1,
+          createdAt: createdAt + 1,
+        }),
+      );
+    }
+    const append = (runId: string, sequence: number, fields: Record<string, unknown>): void => {
+      store.runs.appendEvent(event(runId, sequence, fields));
+    };
+    const finish = (
+      runId: string,
+      modelEnding: Record<string, unknown>,
+      terminal: Record<string, unknown>,
+      sequence: number,
+    ): void => {
+      append(runId, sequence, {
+        modelCallId: `model-${runId}`,
+        round: 0,
+        createdAt: 2_000 + sequence,
+        ...modelEnding,
+      });
+      append(runId, sequence + 1, { createdAt: 3_000 + sequence, ...terminal });
+    };
+    append('history-a', 2, {
+      type: 'tool.requested',
+      modelCallId: 'model-history-a',
+      round: 0,
+      toolCall: { id: 'history-tool-a', name: 'fixture', input: {} },
+    });
+    append('history-a', 3, {
+      type: 'tool.started',
+      modelCallId: 'model-history-a',
+      round: 0,
+      toolCall: { id: 'history-tool-a', name: 'fixture', input: {} },
+    });
+    append('history-a', 4, {
+      type: 'tool.completed',
+      modelCallId: 'model-history-a',
+      round: 0,
+      toolCallId: 'history-tool-a',
+      output: { ok: true },
+    });
+    finish(
+      'history-a',
+      {
+        type: 'model.completed',
+        durationMs: 10,
+        finishReason: 'tool-calls',
+        usage: { promptTokens: 0, totalTokens: 0 },
+      },
+      { type: 'run.completed', finalContent: 'done' },
+      5,
+    );
+    append('history-b', 2, {
+      type: 'tool.requested',
+      modelCallId: 'model-history-b',
+      round: 0,
+      toolCall: { id: 'history-tool-b-local', name: 'fixture', input: {} },
+    });
+    append('history-b', 3, {
+      type: 'tool.started',
+      modelCallId: 'model-history-b',
+      round: 0,
+      toolCall: { id: 'history-tool-b-local', name: 'fixture', input: {} },
+    });
+    append('history-b', 4, {
+      type: 'tool.failed',
+      modelCallId: 'model-history-b',
+      round: 0,
+      toolCallId: 'history-tool-b-local',
+      error: 'local execution failed',
+    });
+    append('history-b', 5, {
+      type: 'tool.requested',
+      modelCallId: 'model-history-b',
+      round: 0,
+      toolCall: { id: 'history-tool-b-rejected', name: 'fixture', input: {} },
+    });
+    append('history-b', 6, {
+      type: 'tool.failed',
+      modelCallId: 'model-history-b',
+      round: 0,
+      toolCallId: 'history-tool-b-rejected',
+      error: 'invalid input',
+      diagnostic: { kind: 'invalid-arguments', source: 'model-provider-output' },
+    });
+    finish(
+      'history-b',
+      {
+        type: 'model.failed',
+        durationMs: 20,
+        errorCode: 'provider-error',
+        errorSummary: 'fixture failure',
+        usage: { completionTokens: 4 },
+      },
+      { type: 'run.failed', error: 'fixture failure' },
+      7,
+    );
+    finish(
+      'history-c',
+      { type: 'model.cancelled', durationMs: 30 },
+      { type: 'run.cancelled', reason: 'fixture cancellation' },
+      2,
+    );
+
+    const context = contexts.get('history-a');
+    if (!context) throw new Error('Missing fixture Task context');
+    const expert = store.experts.create({
+      id: 'history-expert',
+      revisionId: 'history-expert-revision',
+      sourceKind: 'user',
+      revision: {
+        name: 'History expert',
+        summary: 'fixture',
+        author: '',
+        tags: [],
+        identity: 'fixture',
+        principles: [],
+        inputRequirements: [],
+        deliveryRequirements: [],
+        skillPreset: [],
+        builtinToolPolicy: { mode: 'application-defaults' },
+        modelReference: { mode: 'application-default' },
+      },
+    });
+    store.runContextSnapshots.create({
+      runId: 'history-a',
+      taskId: context.taskId,
+      workspaceId: workspace.id,
+      expertId: expert.id,
+      expertRevisionId: 'history-expert-revision',
+      contextSegmentId: 'history-segment',
+      materials: [],
+      createdAt: 1_000,
+    });
+    store.runMemoryContexts.recordSelection({
+      runId: 'history-a',
+      evaluatedAt: 1,
+      queryHash: hash('history-query'),
+      policySnapshot: memoryRecallPolicyV1,
+      selectedItems: [],
+      decisionSummary: {
+        budget: {
+          totalItems: 2,
+          preferenceItems: 0,
+          contentCodePoints: 120,
+          wrapperCodePoints: 40,
+          blockCodePoints: 160,
+        },
+        exclusions: [],
+        queryTruncated: false,
+        conflictReviewRequired: false,
+      },
+      authorizationHash: hash('history-authorization'),
+      selectedAt: 1,
+    });
+    store.runMemoryContexts.markRequestPrepared({
+      runId: 'history-a',
+      requestHash: hash('history-request'),
+      at: 2,
+      modelSnapshot: { fingerprint: 'history-model-fingerprint' },
+    });
+    store.skills.save({
+      id: 'history-skill',
+      name: 'History Skill',
+      description: '',
+      sourceKind: 'user',
+      currentRevisionId: 'history-skill-revision',
+    });
+    store.skills.saveRevision({
+      id: 'history-skill-revision',
+      skillId: 'history-skill',
+      contentHash: 'history-content-hash',
+      resourceKey: 'user/history-skill/content',
+      frontmatter: {},
+    });
+    store.skills.saveProfile({
+      id: 'history-skill-profile',
+      skillId: 'history-skill',
+      profileHash: 'history-profile-hash',
+      profile: { commands: [], environmentRequirements: [], outputContract: { outputPaths: [] } },
+    });
+    store.skills.save({
+      id: 'history-skill',
+      name: 'History Skill',
+      description: '',
+      sourceKind: 'user',
+      currentRevisionId: 'history-skill-revision',
+      currentProfileRevisionId: 'history-skill-profile',
+    });
+    store.skills.setTrustPreference('history-skill', 'trusted');
+    const grantId = store.skills.saveTrustGrant({
+      id: 'history-skill-grant',
+      skillId: 'history-skill',
+      revisionId: 'history-skill-revision',
+      profileHash: 'history-profile-hash',
+      dependencyFingerprint: 'history-dependencies',
+      scopeHash: 'history-scope',
+      source: 'user',
+    });
+    store.executions.createBinding({
+      id: 'history-skill-binding',
+      runId: 'history-a',
+      skillRevisionId: 'history-skill-revision',
+      profileRevisionId: 'history-skill-profile',
+      dependencySnapshotIds: [],
+      grantId,
+    });
+
+    const firstPage = store.runDiagnostics.getHistoryPage({
+      workspaceId: workspace.id,
+      pageSize: 2,
+    });
+    expect(firstPage.runs.map(({ summary }) => summary.runId)).toEqual(['history-d', 'history-c']);
+    expect(firstPage.nextCursor).toMatchObject({
+      workspaceId: workspace.id,
+      afterCreatedAt: 3_000,
+      afterRunId: 'history-c',
+    });
+    expect(firstPage.stats).toMatchObject({
+      runCount: 4,
+      statusCounts: { completed: 1, failed: 1, cancelled: 1, running: 1 },
+      runFailure: {
+        failedRunCount: 1,
+        denominatorRunCount: 2,
+        excludedCancelledRunCount: 1,
+        excludedRunningRunCount: 1,
+        rate: 0.5,
+      },
+      modelCallCount: 4,
+      toolCallCount: 3,
+      toolExecutionCount: 2,
+      failedToolExecutionCount: 1,
+      rejectedToolCallCount: 1,
+      usage: {
+        promptTokens: { knownSubtotal: '0', knownCallCount: 1, missingCallCount: 3 },
+        completionTokens: { knownSubtotal: '4', knownCallCount: 1, missingCallCount: 3 },
+        totalTokens: { knownSubtotal: '0', knownCallCount: 1, missingCallCount: 3 },
+      },
+      modelCallDurationMs: {
+        sampleCount: 3,
+        p50: 20,
+        p95: 30,
+        excludedCounts: { running: 1 },
+      },
+    });
+    const secondPage = store.runDiagnostics.getHistoryPage({
+      workspaceId: workspace.id,
+      pageSize: 2,
+      cursor: firstPage.nextCursor,
+    });
+    expect(secondPage.runs.map(({ summary }) => summary.runId)).toEqual(['history-b', 'history-a']);
+    expect(secondPage.stats).toEqual(firstPage.stats);
+    expect(secondPage.runs[1]).toMatchObject({
+      expertId: 'history-expert',
+      expertRevisionId: 'history-expert-revision',
+      skillRevisionIds: ['history-skill-revision'],
+      modelFingerprint: 'history-model-fingerprint',
+    });
+    expect(secondPage.runs[0]).not.toHaveProperty('expertRevisionId');
+    for (const filter of [
+      { taskId: context.taskId },
+      { fromCreatedAt: 1_000, throughCreatedAt: 1_000 },
+      { expertRevisionId: 'history-expert-revision' },
+      { skillRevisionId: 'history-skill-revision' },
+      { modelFingerprint: 'history-model-fingerprint' },
+    ]) {
+      expect(
+        store.runDiagnostics
+          .getHistoryPage({ workspaceId: workspace.id, filter })
+          .runs.map(({ summary }) => summary.runId),
+      ).toEqual(['history-a']);
+    }
+    expect(
+      store.runDiagnostics.getHistoryPage({
+        workspaceId: workspace.id,
+        filter: { expertRevisionId: 'missing-expert-revision' },
+      }).runs,
+    ).toEqual([]);
+
+    const otherWorkspace = store.workspaces.getOrCreate('/tmp/diagnostic-history-other', 'other');
+    const otherTask = store.tasks.create(otherWorkspace.id, 'other-task', 'other');
+    store.runs.create({
+      id: 'history-outside-workspace',
+      taskId: otherTask.task.id,
+      sessionId: otherTask.sessionId,
+      prompt: 'outside',
+      status: 'running',
+      createdAt: 9_000,
+    });
+    expect(store.runDiagnostics.getHistoryPage({ workspaceId: workspace.id }).runs).toHaveLength(4);
+  });
+
+  it('projects HostDiagnosticEvent with its own sequence and explicit cross-source parents', () => {
+    const store = openStore();
+    const runId = 'host-tree';
+    seedRun(store, runId, { version: 2, sections: ['core', 'host'] });
+    store.runs.appendEvent(
+      event(runId, 0, {
+        type: 'tool.started',
+        toolCall: { id: 'skill-tool', name: 'skill_execute', input: {} },
+      }),
+    );
+    const appendHost = (input: Parameters<typeof store.runHostDiagnostics.append>[0]): void => {
+      store.runHostDiagnostics.append(input);
+    };
+    appendHost({
+      id: 'prepare-start',
+      runId,
+      operationId: 'prepare-op',
+      kind: 'run-host',
+      phase: 'prepare',
+      state: 'started',
+      createdAt: 100,
+    });
+    appendHost({
+      id: 'prepare-finish',
+      runId,
+      operationId: 'prepare-op',
+      kind: 'run-host',
+      phase: 'prepare',
+      state: 'completed',
+      createdAt: 110,
+      durationMs: 10,
+    });
+    appendHost({
+      id: 'dispatch-start',
+      runId,
+      operationId: 'dispatch-op',
+      toolCallId: 'skill-tool',
+      kind: 'skill-host',
+      phase: 'dispatch',
+      state: 'started',
+      createdAt: 100,
+    });
+    appendHost({
+      id: 'dispatch-finish',
+      runId,
+      operationId: 'dispatch-op',
+      toolCallId: 'skill-tool',
+      kind: 'skill-host',
+      phase: 'dispatch',
+      state: 'completed',
+      createdAt: 120,
+      durationMs: 20,
+    });
+    appendHost({
+      id: 'execute-start',
+      runId,
+      operationId: 'execute-op',
+      parentOperationId: 'dispatch-op',
+      toolCallId: 'skill-tool',
+      kind: 'skill-host',
+      phase: 'execute',
+      state: 'started',
+      createdAt: 110,
+    });
+    appendHost({
+      id: 'execute-finish',
+      runId,
+      operationId: 'execute-op',
+      parentOperationId: 'dispatch-op',
+      toolCallId: 'skill-tool',
+      kind: 'skill-host',
+      phase: 'execute',
+      state: 'completed',
+      createdAt: 115,
+      durationMs: 5,
+    });
+
+    const nodes = store.runDiagnostics.getPage({ runId })?.nodes ?? [];
+    expect(nodes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'host:dispatch-op',
+          sourceKind: 'host-diagnostic',
+          sourceSequenceStart: 2,
+          parentId: 'tool:skill-tool',
+          operationId: 'dispatch-op',
+          occurredAt: 100,
+        }),
+        expect.objectContaining({
+          id: 'host:execute-op',
+          sourceSequenceStart: 4,
+          parentId: 'host:dispatch-op',
+          durationMs: 5,
+        }),
+      ]),
+    );
+    expect(nodes.find((node) => node.id === 'tool:skill-tool')).toMatchObject({
+      sourceKind: 'core-journal',
+      sourceSequenceStart: 0,
+      occurredAt: 100,
+    });
+    expect(store.runDiagnostics.getSummary(runId)?.integrity).toBe('partial');
+
+    const pagedIds: string[] = [];
+    let cursor: RunDiagnosticsCursor | undefined;
+    do {
+      const page = store.runDiagnostics.getPage({
+        runId,
+        pageSize: 2,
+        ...(cursor ? { cursor } : {}),
+      });
+      if (!page) break;
+      pagedIds.push(...page.nodes.map((node) => node.id));
+      cursor = page.nextCursor;
+    } while (cursor);
+    expect(pagedIds).toEqual(nodes.map((node) => node.id));
+    expect(new Set(pagedIds).size).toBe(nodes.length);
+  });
+
   it('projects model/tool events in stable pages and keeps unknown usage separate from real zero', () => {
     const store = openStore();
     const taskId = seedRun(store, 'trace', { version: 1, sections: ['core'] });
@@ -299,5 +753,114 @@ describe('RunDiagnosticsRepository', () => {
       expect.objectContaining({ id: 'model:duplicate-call', status: 'unknown' }),
     );
     expect(repeated?.summary.taskId).toBe(duplicateTaskId);
+  });
+
+  it('saves one problem mark per Run with same-Run node validation and revision CAS', () => {
+    const store = openStore();
+    const workspaceId = store.workspaces.getOrCreate(
+      '/tmp/run-diagnostics/mark-shared',
+      'marks',
+    ).id;
+    const taskA = store.tasks.create(workspaceId, 'mark-task-a', 'diagnostics fixture');
+    const taskB = store.tasks.create(workspaceId, 'mark-task-b', 'diagnostics fixture');
+    store.runs.create(
+      {
+        id: 'mark-run-a',
+        taskId: taskA.task.id,
+        sessionId: taskA.sessionId,
+        prompt: 'private prompt',
+        status: 'running',
+        createdAt: 1,
+      },
+      { version: 1, sections: ['core'] },
+    );
+    store.runs.create(
+      {
+        id: 'mark-run-b',
+        taskId: taskB.task.id,
+        sessionId: taskB.sessionId,
+        prompt: 'private prompt',
+        status: 'running',
+        createdAt: 2,
+      },
+      { version: 1, sections: ['core'] },
+    );
+    for (const { runId, callId } of [
+      { runId: 'mark-run-a', callId: 'call-a' },
+      { runId: 'mark-run-b', callId: 'call-b' },
+    ]) {
+      store.runs.appendEvent(
+        event(runId, 0, {
+          type: 'model.started',
+          modelCallId: callId,
+          round: 0,
+          providerId: 'fixture',
+          messageCount: 1,
+          toolDefinitionCount: 0,
+        }),
+      );
+      store.runs.appendEvent(
+        event(runId, 1, {
+          type: 'model.completed',
+          modelCallId: callId,
+          round: 0,
+          durationMs: 12,
+        }),
+      );
+    }
+
+    const scopedInput = {
+      workspaceId,
+      taskId: taskA.task.id,
+      runId: 'mark-run-a',
+    };
+    const input = {
+      ...scopedInput,
+      expectedRevision: null,
+      category: 'model' as const,
+      diagnosticNodeId: 'model:call-a',
+    };
+    expect(store.runDiagnostics.setIssueMark(input, 100)).toMatchObject({
+      runId: input.runId,
+      category: 'model',
+      diagnosticNodeId: 'model:call-a',
+      revision: 1,
+      updatedAt: 100,
+    });
+    expect(store.runDiagnostics.getIssueMark(input.runId)).toMatchObject({ revision: 1 });
+    expect(() => store.runDiagnostics.setIssueMark(input, 101)).toThrow(/已在别处更新/u);
+    expect(() =>
+      store.runDiagnostics.setIssueMark(
+        {
+          ...scopedInput,
+          expectedRevision: 1,
+          category: 'model',
+          diagnosticNodeId: 'model:call-b',
+        },
+        102,
+      ),
+    ).toThrow(/不属于当前 Run/u);
+
+    const updated = store.runDiagnostics.setIssueMark(
+      { ...scopedInput, expectedRevision: 1, category: 'tool' },
+      103,
+    );
+    expect(updated).toMatchObject({ category: 'tool', revision: 2, updatedAt: 103 });
+    expect(
+      store.runDiagnostics.setIssueMark(
+        { ...scopedInput, expectedRevision: 2, category: null },
+        104,
+      ),
+    ).toBeNull();
+    expect(store.runDiagnostics.getIssueMark(input.runId)).toBeUndefined();
+    expect(
+      store.runDiagnostics.setIssueMark(
+        { ...scopedInput, expectedRevision: null, category: 'other' },
+        105,
+      ),
+    ).toMatchObject({ category: 'other', revision: 1 });
+    const db = (store as unknown as { db: Database.Database }).db;
+    db.prepare('DELETE FROM runs WHERE id = ?').run(input.runId);
+    expect(store.runDiagnostics.getIssueMark(input.runId)).toBeUndefined();
   });
 });

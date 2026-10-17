@@ -582,6 +582,36 @@ export class ArtifactRepository {
     }));
   }
 
+  /** Exact-version metadata lookup for historical Run sources; never follows current_version_id. */
+  getMaterialVersion(versionId: string): ArtifactMaterialVersion | undefined {
+    const row = this.db
+      .prepare(
+        `SELECT v.id, v.artifact_id, a.workspace_id, a.title, v.version_number,
+                CASE WHEN v.content IS NOT NULL THEN v.content_hash
+                     WHEN af.version_id IS NOT NULL THEN af.file_hash
+                     ELSE 'unavailable' END AS content_hash,
+                CASE WHEN v.content IS NOT NULL THEN 'markdown'
+                     WHEN af.version_id IS NOT NULL THEN 'presentation'
+                     ELSE NULL END AS readable_type
+           FROM artifact_versions v
+           JOIN artifacts a ON a.id = v.artifact_id
+           LEFT JOIN artifact_files af ON af.version_id = v.id
+          WHERE v.id = ?`,
+      )
+      .get(versionId) as ArtifactMaterialVersionRow | undefined;
+    return row
+      ? {
+          id: row.id,
+          artifactId: row.artifact_id,
+          workspaceId: row.workspace_id,
+          title: row.title,
+          versionNumber: row.version_number,
+          contentHash: row.content_hash,
+          ...(row.readable_type === null ? {} : { type: row.readable_type }),
+        }
+      : undefined;
+  }
+
   listVersions(artifactId: string): ArtifactVersionSummary[] {
     const rows = this.db
       .prepare(

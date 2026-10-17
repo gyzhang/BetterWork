@@ -1015,10 +1015,12 @@ describe('ContextPanel 执行详情入口（AT09）', () => {
       value: {
         runs: {
           getDiagnosticsSummary,
+          getDiagnosticsSources: vi.fn().mockResolvedValue(null),
           listDiagnosticsPage,
           getDiagnosticNodeDetail: vi.fn().mockResolvedValue(null),
           listEvents: vi.fn().mockResolvedValue([]),
           onEvent: vi.fn(() => unsubscribe),
+          onDiagnosticsChanged: vi.fn(() => unsubscribe),
           cancel: cancelRun,
         },
       },

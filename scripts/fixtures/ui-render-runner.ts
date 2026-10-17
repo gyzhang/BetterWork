@@ -146,6 +146,7 @@ async function run(): Promise<void> {
       '--app-only',
       '--schedule-only',
       '--mcp-only',
+      '--diagnostics-only',
     ].includes(argument),
   )
     ? []
@@ -246,7 +247,18 @@ async function run(): Promise<void> {
         ? ['mcp']
         : process.argv.includes('--schedule-only')
           ? ['schedule']
-          : ['artifact', 'knowledge', 'expert', 'memory', 'schedule', 'help', 'mcp']) {
+          : process.argv.includes('--diagnostics-only')
+            ? ['diagnostics']
+            : [
+                'artifact',
+                'knowledge',
+                'expert',
+                'memory',
+                'schedule',
+                'help',
+                'mcp',
+                'diagnostics',
+              ]) {
     for (const mode of ['light', 'dark']) {
       for (const width of [760, 1380]) {
         for (const reducedMotion of [false, true]) {
@@ -302,6 +314,23 @@ async function run(): Promise<void> {
               }
               if (step === 'artifact-keyboard') reading = await checkArtifactKeyboard(window);
               if (step === 'memory-keyboard') reading = await checkConflictKeyboard(window);
+              if (step === 'diagnostics-keyboard') {
+                await keyboard(window, 'Tab');
+                const focus = (await window.webContents.executeJavaScript(`(() => {
+                  const dialog = document.querySelector('.run-execution-details');
+                  const active = document.activeElement;
+                  return { inside: Boolean(dialog && active && dialog.contains(active)),
+                    visible: Boolean(active && active.getBoundingClientRect().width > 0) };
+                })()`)) as { inside: boolean; visible: boolean };
+                if (!focus.inside || !focus.visible)
+                  throw new Error('执行详情 Tab 没有把焦点留在可见对话框内');
+                await keyboard(window, 'Escape');
+                await waitFor(
+                  window,
+                  '!document.querySelector(".run-execution-details") && document.activeElement.id === "run-diagnostics-open"',
+                );
+                reading = { nativeKeys: ['Tab', 'Escape'], focusInside: true, focusReturned: true };
+              }
               if (errors.length > 0) throw new Error(`页面运行错误：${errors.join('；')}`);
               const modalOpen = (await window.webContents.executeJavaScript(
                 'Boolean(document.querySelector("[aria-modal=true]"))',
@@ -342,13 +371,17 @@ async function run(): Promise<void> {
   if (
     !process.argv.includes('--probe-page-feedback') &&
     !process.argv.includes('--schedule-only') &&
-    !process.argv.includes('--mcp-only')
+    !process.argv.includes('--mcp-only') &&
+    !process.argv.includes('--diagnostics-only')
   ) {
     const { runAppJourney } = await import('./ui-app-journey');
     results.push(
       await runAppJourney(
         output,
         async (window, filename) => {
+          await window.webContents.executeJavaScript(
+            'Promise.all(document.getAnimations().filter(animation => animation.effect?.getTiming().iterations !== Infinity).map(animation => animation.finished.catch(() => false)))',
+          );
           await writeFile(filename, (await paintedFrame(window)).toPNG());
         },
         process.argv.includes('--probe-app-persistence'),

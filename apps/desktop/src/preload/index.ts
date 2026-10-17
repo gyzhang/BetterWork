@@ -10,6 +10,7 @@ import type {
   FileArtifactDetail,
   OpenFileArtifactResult,
   OpenKnowledgeSourceResult,
+  RunDiagnosticsChangedEvent,
 } from '@betterwork/agent-protocol';
 import {
   agentRuntimeEventSchema,
@@ -64,6 +65,8 @@ import {
   exportFileArtifactResultSchema,
   exportMarkdownArtifactRequestSchema,
   exportMarkdownArtifactResultSchema,
+  exportRunDiagnosticPackageRequestSchema,
+  exportRunDiagnosticPackageResultSchema,
   exportSkillRequestSchema,
   fileArtifactDetailSchema,
   getArtifactRequestSchema,
@@ -79,6 +82,7 @@ import {
   getMemorySettingsRequestSchema,
   getNotificationRequestSchema,
   getRunArtifactDeclarationsRequestSchema,
+  getRunDiagnosticIssueMarkRequestSchema,
   getRunDiagnosticNodeDetailRequestSchema,
   getRunDiagnosticsSummaryRequestSchema,
   getRunMemoryContextRequestSchema,
@@ -119,6 +123,7 @@ import {
   listKnowledgeRevisionsRequestSchema,
   listMemoriesRequestSchema,
   listMemoryJobsRequestSchema,
+  listRunDiagnosticsHistoryRequestSchema,
   listRunDiagnosticsPageRequestSchema,
   listRunEventsRequestSchema,
   listRunsRequestSchema,
@@ -192,8 +197,12 @@ import {
   revealFileArtifactResultSchema,
   revokeSkillTrustRequestSchema,
   runArtifactSourceDeclarationSchema,
+  runDiagnosticIssueMarkResponseSchema,
   runDiagnosticNodeDetailResponseSchema,
+  runDiagnosticsChangedEventSchema,
+  runDiagnosticsHistoryPageResponseSchema,
   runDiagnosticsPageResponseSchema,
+  runDiagnosticsSourcesResponseSchema,
   runDiagnosticsSummaryResponseSchema,
   runSettingsSchema,
   runSourcePreviewSchema,
@@ -233,6 +242,7 @@ import {
   setMemorySettingsRequestSchema,
   setMemoryStatusRequestSchema,
   setModelEnabledRequestSchema,
+  setRunDiagnosticIssueMarkRequestSchema,
   setScheduleLifecycleRequestSchema,
   setSkillEnabledRequestSchema,
   setSkillTrustRequestSchema,
@@ -370,10 +380,35 @@ const runInvokeContracts = defineInvokeContracts({
     request: getRunDiagnosticsSummaryRequestSchema,
     response: runDiagnosticsSummaryResponseSchema,
   },
+  [IpcChannel.GetRunDiagnosticsSources]: {
+    channel: IpcChannel.GetRunDiagnosticsSources,
+    request: getRunDiagnosticsSummaryRequestSchema,
+    response: runDiagnosticsSourcesResponseSchema,
+  },
   [IpcChannel.ListRunDiagnosticsPage]: {
     channel: IpcChannel.ListRunDiagnosticsPage,
     request: listRunDiagnosticsPageRequestSchema,
     response: runDiagnosticsPageResponseSchema,
+  },
+  [IpcChannel.ListRunDiagnosticsHistory]: {
+    channel: IpcChannel.ListRunDiagnosticsHistory,
+    request: listRunDiagnosticsHistoryRequestSchema,
+    response: runDiagnosticsHistoryPageResponseSchema,
+  },
+  [IpcChannel.GetRunDiagnosticIssueMark]: {
+    channel: IpcChannel.GetRunDiagnosticIssueMark,
+    request: getRunDiagnosticIssueMarkRequestSchema,
+    response: runDiagnosticIssueMarkResponseSchema,
+  },
+  [IpcChannel.SetRunDiagnosticIssueMark]: {
+    channel: IpcChannel.SetRunDiagnosticIssueMark,
+    request: setRunDiagnosticIssueMarkRequestSchema,
+    response: runDiagnosticIssueMarkResponseSchema,
+  },
+  [IpcChannel.ExportRunDiagnosticPackage]: {
+    channel: IpcChannel.ExportRunDiagnosticPackage,
+    request: exportRunDiagnosticPackageRequestSchema,
+    response: exportRunDiagnosticPackageResultSchema,
   },
   [IpcChannel.GetRunDiagnosticNodeDetail]: {
     channel: IpcChannel.GetRunDiagnosticNodeDetail,
@@ -474,8 +509,18 @@ const runInvokeMethods: InvokeMethodsByChannel<typeof runInvokeContracts> = {
     invokeContract(runInvokeContracts[IpcChannel.ListRunEvents], input),
   [IpcChannel.GetRunDiagnosticsSummary]: (input) =>
     invokeContract(runInvokeContracts[IpcChannel.GetRunDiagnosticsSummary], input),
+  [IpcChannel.GetRunDiagnosticsSources]: (input) =>
+    invokeContract(runInvokeContracts[IpcChannel.GetRunDiagnosticsSources], input),
   [IpcChannel.ListRunDiagnosticsPage]: (input) =>
     invokeContract(runInvokeContracts[IpcChannel.ListRunDiagnosticsPage], input),
+  [IpcChannel.ListRunDiagnosticsHistory]: (input) =>
+    invokeContract(runInvokeContracts[IpcChannel.ListRunDiagnosticsHistory], input),
+  [IpcChannel.GetRunDiagnosticIssueMark]: (input) =>
+    invokeContract(runInvokeContracts[IpcChannel.GetRunDiagnosticIssueMark], input),
+  [IpcChannel.SetRunDiagnosticIssueMark]: (input) =>
+    invokeContract(runInvokeContracts[IpcChannel.SetRunDiagnosticIssueMark], input),
+  [IpcChannel.ExportRunDiagnosticPackage]: (input) =>
+    invokeContract(runInvokeContracts[IpcChannel.ExportRunDiagnosticPackage], input),
   [IpcChannel.GetRunDiagnosticNodeDetail]: (input) =>
     invokeContract(runInvokeContracts[IpcChannel.GetRunDiagnosticNodeDetail], input),
   [IpcChannel.GetRunSettings]: (input) =>
@@ -493,6 +538,17 @@ const runEventContracts = defineEventContracts({
 const runEventMethods: EventMethodsByChannel<typeof runEventContracts> = {
   [IpcChannel.RunEvent]: (listener) =>
     listenContract(runEventContracts[IpcChannel.RunEvent], listener),
+};
+
+const runDiagnosticsChangedContracts = defineEventContracts({
+  [IpcChannel.RunDiagnosticsChanged]: {
+    channel: IpcChannel.RunDiagnosticsChanged,
+    event: runDiagnosticsChangedEventSchema,
+  },
+});
+const runDiagnosticsChangedMethods: EventMethodsByChannel<typeof runDiagnosticsChangedContracts> = {
+  [IpcChannel.RunDiagnosticsChanged]: (listener) =>
+    listenContract(runDiagnosticsChangedContracts[IpcChannel.RunDiagnosticsChanged], listener),
 };
 
 const workspaceTaskInvokeMethods: InvokeMethodsByChannel<typeof workspaceTaskInvokeContracts> = {
@@ -1736,10 +1792,21 @@ const api: BetterWorkDesktopApi = {
     list: (input) => runInvokeMethods[IpcChannel.ListRuns](input),
     listEvents: (input) => runInvokeMethods[IpcChannel.ListRunEvents](input),
     getDiagnosticsSummary: (input) => runInvokeMethods[IpcChannel.GetRunDiagnosticsSummary](input),
+    getDiagnosticsSources: (input) => runInvokeMethods[IpcChannel.GetRunDiagnosticsSources](input),
     listDiagnosticsPage: (input) => runInvokeMethods[IpcChannel.ListRunDiagnosticsPage](input),
+    listDiagnosticsHistory: (input) =>
+      runInvokeMethods[IpcChannel.ListRunDiagnosticsHistory](input),
+    getDiagnosticIssueMark: (input) =>
+      runInvokeMethods[IpcChannel.GetRunDiagnosticIssueMark](input),
+    setDiagnosticIssueMark: (input) =>
+      runInvokeMethods[IpcChannel.SetRunDiagnosticIssueMark](input),
+    exportDiagnosticPackage: (input) =>
+      runInvokeMethods[IpcChannel.ExportRunDiagnosticPackage](input),
     getDiagnosticNodeDetail: (input) =>
       runInvokeMethods[IpcChannel.GetRunDiagnosticNodeDetail](input),
     onEvent: (listener) => runEventMethods[IpcChannel.RunEvent](listener),
+    onDiagnosticsChanged: (listener: (event: RunDiagnosticsChangedEvent) => void) =>
+      runDiagnosticsChangedMethods[IpcChannel.RunDiagnosticsChanged](listener),
   },
   runSettings: {
     get: () => runInvokeMethods[IpcChannel.GetRunSettings]({}),

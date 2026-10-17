@@ -2312,6 +2312,73 @@ export const appMigrations: readonly Migration[] = [
       `);
     },
   },
+  {
+    version: 49,
+    name: 'add independent Run host diagnostic fact stream',
+    up(db: Database.Database): void {
+      db.exec(`
+        CREATE TABLE run_diagnostic_events (
+          id TEXT PRIMARY KEY,
+          run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+          operation_id TEXT NOT NULL CHECK (length(operation_id) BETWEEN 1 AND 512),
+          parent_operation_id TEXT CHECK (
+            parent_operation_id IS NULL OR
+            (length(parent_operation_id) BETWEEN 1 AND 512 AND parent_operation_id != operation_id)
+          ),
+          diagnostic_sequence INTEGER NOT NULL CHECK (diagnostic_sequence >= 0),
+          kind TEXT NOT NULL CHECK (kind IN ('run-host', 'skill-host')),
+          phase TEXT NOT NULL,
+          state TEXT NOT NULL CHECK (
+            state IN ('started', 'completed', 'failed', 'cancelled', 'interrupted')
+          ),
+          tool_call_id TEXT CHECK (tool_call_id IS NULL OR length(tool_call_id) BETWEEN 1 AND 512),
+          execution_id TEXT CHECK (execution_id IS NULL OR length(execution_id) BETWEEN 1 AND 512),
+          duration_ms REAL CHECK (duration_ms IS NULL OR duration_ms >= 0),
+          error_code TEXT CHECK (error_code IS NULL OR error_code IN (
+            'prepare-failed', 'audit-failed', 'cleanup-failed', 'commit-failed',
+            'dispatch-failed', 'execute-failed', 'validate-failed', 'publish-failed',
+            'timed-out', 'cancelled', 'interrupted', 'observer-failed'
+          )),
+          metadata_json TEXT CHECK (metadata_json IS NULL OR json_valid(metadata_json)),
+          created_at INTEGER NOT NULL CHECK (created_at >= 0),
+          CHECK (
+            (kind = 'run-host' AND phase IN (
+              'prepare', 'audit', 'skill-cleanup', 'mcp-cleanup', 'artifact-commit'
+            )) OR
+            (kind = 'skill-host' AND phase IN (
+              'dispatch', 'execute', 'validate', 'publish', 'cleanup'
+            ))
+          ),
+          UNIQUE(run_id, diagnostic_sequence)
+        );
+        CREATE UNIQUE INDEX idx_run_diagnostic_events_operation_start
+          ON run_diagnostic_events(run_id, operation_id) WHERE state = 'started';
+        CREATE UNIQUE INDEX idx_run_diagnostic_events_operation_terminal
+          ON run_diagnostic_events(run_id, operation_id) WHERE state != 'started';
+        CREATE INDEX idx_run_diagnostic_events_operation
+          ON run_diagnostic_events(run_id, operation_id, diagnostic_sequence);
+      `);
+    },
+  },
+  {
+    version: 50,
+    name: 'add per-Run diagnostic issue marks',
+    up(db: Database.Database): void {
+      db.exec(`
+        CREATE TABLE run_diagnostic_issue_marks (
+          run_id TEXT PRIMARY KEY REFERENCES runs(id) ON DELETE CASCADE,
+          category TEXT NOT NULL CHECK (category IN (
+            'model', 'tool', 'material', 'artifact', 'lifecycle', 'other'
+          )),
+          diagnostic_node_id TEXT CHECK (
+            diagnostic_node_id IS NULL OR length(diagnostic_node_id) BETWEEN 1 AND 512
+          ),
+          revision INTEGER NOT NULL CHECK (revision > 0),
+          updated_at INTEGER NOT NULL CHECK (updated_at >= 0)
+        );
+      `);
+    },
+  },
 ];
 
 /**

@@ -14,10 +14,12 @@ import {
   expertReferenceMaterialSchema,
   exportMarkdownArtifactRequestSchema,
   facetToKind,
+  hostDiagnosticEventSchema,
   importSkillRequestSchema,
   jobResultSchema,
   jobSpecSchema,
   listPageSchema,
+  listRunDiagnosticsHistoryRequestSchema,
   listScheduleOccurrencesRequestSchema,
   listScheduleSourceItemsRequestSchema,
   listSchedulesRequestSchema,
@@ -56,6 +58,13 @@ import {
   resolveMemoryConflictRequestSchema,
   resultSchema,
   retryScheduleOutputRequestSchema,
+  runDiagnosticIssueMarkSchema,
+  runDiagnosticNodeSchema,
+  runDiagnosticPackageSchema,
+  runDiagnosticsChangedEventSchema,
+  runDiagnosticsCursorSchema,
+  runDiagnosticsHistoryPageSchema,
+  runDiagnosticsSourcesSchema,
   runMaterialReadSchema,
   runMemoryContextSchema,
   runtimeEnvironmentSchema,
@@ -87,6 +96,7 @@ import {
   scheduleTimingSchema,
   scriptExecutionSchema,
   setDefaultModelRequestSchema,
+  setRunDiagnosticIssueMarkRequestSchema,
   setScheduleLifecycleRequestSchema,
   setSkillTrustRequestSchema,
   skillBindingSchema,
@@ -2473,6 +2483,400 @@ describe('MI 运行快照 v1/v2 兼容与优先预算字面量', () => {
       saveTaskContinuityBriefRequestSchema.safeParse({
         ...edit,
         progress: { ...edit.progress, authoredBy: 'assistant-summary' },
+      }).success,
+    ).toBe(false);
+  });
+});
+
+it('validates strict host diagnostic event variants and rejects unbounded data', () => {
+  const event = {
+    id: 'host-event-1',
+    runId: 'run-1',
+    operationId: 'operation-1',
+    diagnosticSequence: 0,
+    createdAt: 10,
+    kind: 'run-host',
+    phase: 'prepare',
+    state: 'started',
+    metadata: { outputBytes: 12, outputTruncated: true, result: 'success' },
+  } as const;
+
+  expect(hostDiagnosticEventSchema.safeParse(event).success).toBe(true);
+  expect(hostDiagnosticEventSchema.safeParse({ ...event, phase: 'execute' }).success).toBe(false);
+  expect(
+    hostDiagnosticEventSchema.safeParse({ ...event, metadata: { path: '/private/file' } }).success,
+  ).toBe(false);
+  expect(
+    hostDiagnosticEventSchema.safeParse({ ...event, metadata: { outputTruncated: 'yes' } }).success,
+  ).toBe(false);
+  expect(hostDiagnosticEventSchema.safeParse({ ...event, argv: ['secret'] }).success).toBe(false);
+  expect(
+    hostDiagnosticEventSchema.safeParse({
+      ...event,
+      kind: 'skill-host',
+      phase: 'dispatch',
+    }).success,
+  ).toBe(true);
+});
+
+it('accepts exact diagnostic source references without allowing source bodies or paths', () => {
+  const sources = {
+    runId: 'run-1',
+    integrity: 'complete',
+    fixedContext: {
+      state: 'recorded',
+      taskContextRevisionId: 'context-revision-1',
+      expert: {
+        state: 'recorded',
+        expertId: 'expert-1',
+        revisionId: 'expert-revision-1',
+        revision: 2,
+        name: 'Historical expert',
+      },
+      model: {
+        reference: { mode: 'profile', modelProfileId: 'model-profile-1' },
+        snapshot: {
+          displayName: 'Model snapshot',
+          fingerprint: 'a'.repeat(64),
+          modelProfileId: 'model-profile-1',
+        },
+        memoryPhase: 'dispatch-attempted',
+        dispatchAttemptedAt: 15,
+      },
+      skills: [],
+    },
+    materials: {
+      state: 'recorded',
+      selected: [
+        {
+          reference: {
+            kind: 'knowledge-revision',
+            documentId: 'document-1',
+            revisionId: 'knowledge-revision-1',
+            contentHash: 'b'.repeat(64),
+            title: 'Historical policy',
+            state: 'recorded',
+          },
+          purpose: 'rule',
+          addedFrom: 'user-input',
+          wasRead: false,
+        },
+      ],
+      reads: [],
+    },
+    memory: {
+      state: 'recorded',
+      recallVersion: 'memory-recall-v2',
+      phase: 'dispatch-attempted',
+      selectedItems: [
+        {
+          memoryId: 'memory-1',
+          revisionId: 'memory-revision-1',
+          contentHash: 'c'.repeat(64),
+          order: 1,
+          reason: 'pinned-rule',
+          score: 0,
+        },
+      ],
+      reads: [],
+      replay: [],
+    },
+    continuity: {
+      state: 'recorded',
+      revisionId: 'continuity-revision-1',
+      briefHash: 'd'.repeat(64),
+      preparedAt: 12,
+      firstProviderRequestAt: 15,
+      omissions: [],
+      sourceRunIds: ['prior-run-1'],
+      artifactVersionIds: [],
+    },
+    artifacts: { state: 'recorded', producedVersions: [], inputRelations: [] },
+  } as const;
+
+  expect(runDiagnosticsSourcesSchema.safeParse(sources).success).toBe(true);
+  expect(
+    runDiagnosticsSourcesSchema.safeParse({
+      ...sources,
+      materials: {
+        ...sources.materials,
+        selected: [
+          {
+            ...sources.materials.selected[0],
+            reference: {
+              ...sources.materials.selected[0].reference,
+              sourcePath: '/private/source.md',
+            },
+          },
+        ],
+      },
+    }).success,
+  ).toBe(false);
+  expect(
+    runDiagnosticsSourcesSchema.safeParse({
+      ...sources,
+      memory: {
+        ...sources.memory,
+        selectedItems: [{ ...sources.memory.selectedItems[0], content: 'private memory body' }],
+      },
+    }).success,
+  ).toBe(false);
+});
+
+it('validates strict host diagnostic event variants and rejects unbounded data', () => {
+  const event = {
+    id: 'host-event-1',
+    runId: 'run-1',
+    operationId: 'operation-1',
+    diagnosticSequence: 0,
+    createdAt: 10,
+    kind: 'run-host',
+    phase: 'prepare',
+    state: 'started',
+    metadata: { outputBytes: 12, outputTruncated: true, result: 'success' },
+  } as const;
+
+  expect(hostDiagnosticEventSchema.safeParse(event).success).toBe(true);
+  expect(hostDiagnosticEventSchema.safeParse({ ...event, phase: 'execute' }).success).toBe(false);
+  expect(
+    hostDiagnosticEventSchema.safeParse({ ...event, metadata: { path: '/private/file' } }).success,
+  ).toBe(false);
+  expect(
+    hostDiagnosticEventSchema.safeParse({ ...event, metadata: { outputTruncated: 'yes' } }).success,
+  ).toBe(false);
+  expect(hostDiagnosticEventSchema.safeParse({ ...event, argv: ['secret'] }).success).toBe(false);
+  expect(
+    hostDiagnosticEventSchema.safeParse({
+      ...event,
+      kind: 'skill-host',
+      phase: 'dispatch',
+    }).success,
+  ).toBe(true);
+});
+
+describe('dual-source run diagnostics protocol', () => {
+  it('supports a source-aware host node, stable merged cursor, and payload-free invalidation', () => {
+    const node = {
+      id: 'host:operation-1',
+      parentId: 'tool:tool-1',
+      kind: 'host',
+      status: 'running',
+      sourceKind: 'host-diagnostic',
+      sourceId: 'operation-1',
+      sourceEventIds: ['host-event-1'],
+      sourceSequenceStart: 1,
+      evidenceState: 'recorded',
+      occurredAt: 100,
+      operationId: 'operation-1',
+      hostKind: 'skill-host',
+      hostPhase: 'execute',
+    } as const;
+    const cursor = {
+      runId: 'run-1',
+      source: 'host-diagnostic',
+      afterAt: 100,
+      afterSequence: 1,
+      afterKind: 'host',
+      afterNodeId: 'host:operation-1',
+    } as const;
+
+    expect(runDiagnosticNodeSchema.safeParse(node).success).toBe(true);
+    expect(runDiagnosticsCursorSchema.safeParse(cursor).success).toBe(true);
+    expect(
+      runDiagnosticsChangedEventSchema.safeParse({
+        runId: 'run-1',
+        cursor: { source: 'host-diagnostic', afterSequence: 1 },
+      }).success,
+    ).toBe(true);
+    expect(
+      runDiagnosticsChangedEventSchema.safeParse({
+        runId: 'run-1',
+        cursor: { source: 'host-diagnostic', afterSequence: 1 },
+        event: { stdout: 'must not be broadcast' },
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe('diagnostics history protocol', () => {
+  it('binds diagnostics history cursors to workspace and exact filters', () => {
+    const request = {
+      workspaceId: 'workspace-1',
+      filter: { taskId: 'task-1', fromCreatedAt: 10, throughCreatedAt: 20 },
+      pageSize: 10,
+      cursor: {
+        workspaceId: 'workspace-1',
+        filter: { taskId: 'task-1', fromCreatedAt: 10, throughCreatedAt: 20 },
+        afterCreatedAt: 15,
+        afterRunId: 'run-2',
+      },
+    };
+    expect(listRunDiagnosticsHistoryRequestSchema.safeParse(request).success).toBe(true);
+    expect(
+      listRunDiagnosticsHistoryRequestSchema.safeParse({
+        ...request,
+        filter: { ...request.filter, taskId: 'task-2' },
+      }).success,
+    ).toBe(false);
+    expect(
+      listRunDiagnosticsHistoryRequestSchema.safeParse({
+        ...request,
+        cursor: { ...request.cursor, workspaceId: 'workspace-2' },
+      }).success,
+    ).toBe(false);
+    expect(
+      listRunDiagnosticsHistoryRequestSchema.safeParse({
+        workspaceId: 'workspace-1',
+        filter: { fromCreatedAt: 21, throughCreatedAt: 20 },
+      }).success,
+    ).toBe(false);
+    expect(
+      runDiagnosticsHistoryPageSchema.safeParse({
+        runs: [],
+        stats: {
+          runCount: 0,
+          statusCounts: { completed: 0, failed: 0, cancelled: 0, running: 0 },
+          runFailure: {
+            failedRunCount: 0,
+            denominatorRunCount: 0,
+            excludedCancelledRunCount: 0,
+            excludedRunningRunCount: 0,
+            rate: null,
+          },
+          integrityCounts: { complete: 0, partial: 0, unavailable: 0 },
+          modelCallCount: 0,
+          toolCallCount: 0,
+          toolExecutionCount: 0,
+          failedToolExecutionCount: 0,
+          rejectedToolCallCount: 0,
+          usage: {
+            promptTokens: { knownSubtotal: '0', knownCallCount: 0, missingCallCount: 0 },
+            completionTokens: { knownSubtotal: '0', knownCallCount: 0, missingCallCount: 0 },
+            totalTokens: { knownSubtotal: '0', knownCallCount: 0, missingCallCount: 0 },
+          },
+          modelCallDurationMs: {
+            sampleCount: 0,
+            excludedCounts: {
+              pending: 0,
+              running: 0,
+              interrupted: 0,
+              unknown: 0,
+              missingMeasurement: 0,
+            },
+          },
+        },
+      }).success,
+    ).toBe(true);
+  });
+});
+
+describe('diagnostic issue mark protocol', () => {
+  it('keeps categories bounded and only accepts a node reference for a saved mark', () => {
+    const scope = { workspaceId: 'workspace-1', taskId: 'task-1', runId: 'run-1' };
+    const request = {
+      ...scope,
+      expectedRevision: null,
+      category: 'tool',
+      diagnosticNodeId: 'tool:call-1',
+    };
+    expect(setRunDiagnosticIssueMarkRequestSchema.safeParse(request).success).toBe(true);
+    expect(
+      setRunDiagnosticIssueMarkRequestSchema.safeParse({ ...request, category: 'memory' }).success,
+    ).toBe(false);
+    expect(
+      setRunDiagnosticIssueMarkRequestSchema.safeParse({
+        ...request,
+        category: null,
+      }).success,
+    ).toBe(false);
+    expect(
+      runDiagnosticIssueMarkSchema.safeParse({
+        runId: scope.runId,
+        category: 'tool',
+        diagnosticNodeId: 'tool:call-1',
+        revision: 1,
+        updatedAt: 100,
+      }).success,
+    ).toBe(true);
+  });
+});
+
+describe('run diagnostic package protocol', () => {
+  it('accepts only versioned diagnostic facts and rejects private or unknown fields', () => {
+    const data = {
+      schemaVersion: 1,
+      generatedAt: 100,
+      applicationVersion: '1.2.0',
+      run: {
+        id: 'run-1',
+        taskId: 'task-1',
+        sessionId: 'session-1',
+        status: 'completed',
+        createdAt: 10,
+        completedAt: 30,
+      },
+      diagnostics: {
+        integrity: 'complete',
+        summary: {
+          modelCallCount: 1,
+          toolCallCount: 0,
+          toolExecutionCount: 0,
+          failedToolExecutionCount: 0,
+          rejectedToolCallCount: 0,
+          usage: {
+            promptTokens: { knownSubtotal: '4', knownCallCount: 1, missingCallCount: 0 },
+            completionTokens: { knownSubtotal: '6', knownCallCount: 1, missingCallCount: 0 },
+            totalTokens: { knownSubtotal: '10', knownCallCount: 1, missingCallCount: 0 },
+          },
+        },
+        nodes: [
+          {
+            id: 'model:call-1',
+            kind: 'model',
+            status: 'completed',
+            sourceKind: 'core-journal',
+            evidenceState: 'recorded',
+            sourceSequenceStart: 1,
+            sourceSequenceEnd: 2,
+            modelCallId: 'call-1',
+            durationMs: 20,
+          },
+        ],
+      },
+      issueMark: { category: 'tool', diagnosticNodeId: 'tool:call-1' },
+      sources: {
+        integrity: 'complete',
+        fixedContext: { state: 'recorded', skills: [] },
+        materials: { state: 'recorded', selected: [], reads: [] },
+        memory: { state: 'recorded', selectedItems: [], readCount: 0, replayCount: 0 },
+        continuity: {
+          state: 'not-recorded',
+          omissions: [],
+          sourceRunIds: [],
+          artifactVersionIds: [],
+        },
+        artifacts: { state: 'not-recorded', producedVersions: [], inputRelations: [] },
+      },
+    };
+
+    expect(runDiagnosticPackageSchema.safeParse(data).success).toBe(true);
+    expect(
+      runDiagnosticPackageSchema.safeParse({
+        ...data,
+        run: { ...data.run, prompt: 'sk-private-secret' },
+      }).success,
+    ).toBe(false);
+    expect(
+      runDiagnosticPackageSchema.safeParse({
+        ...data,
+        sources: {
+          ...data.sources,
+          materials: {
+            state: 'recorded',
+            selected: [{ title: '/private/customer.md' }],
+            reads: [],
+          },
+        },
       }).success,
     ).toBe(false);
   });

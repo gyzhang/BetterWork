@@ -55,6 +55,8 @@ import {
   exportFileArtifactResultSchema,
   exportMarkdownArtifactRequestSchema,
   exportMarkdownArtifactResultSchema,
+  exportRunDiagnosticPackageRequestSchema,
+  exportRunDiagnosticPackageResultSchema,
   exportSkillRequestSchema,
   fileArtifactDetailSchema,
   getArtifactRequestSchema,
@@ -70,6 +72,7 @@ import {
   getMemorySettingsRequestSchema,
   getNotificationRequestSchema,
   getRunArtifactDeclarationsRequestSchema,
+  getRunDiagnosticIssueMarkRequestSchema,
   getRunDiagnosticNodeDetailRequestSchema,
   getRunDiagnosticsSummaryRequestSchema,
   getRunMemoryContextRequestSchema,
@@ -109,6 +112,7 @@ import {
   listKnowledgeRevisionsRequestSchema,
   listMemoriesRequestSchema,
   listMemoryJobsRequestSchema,
+  listRunDiagnosticsHistoryRequestSchema,
   listRunDiagnosticsPageRequestSchema,
   listRunEventsRequestSchema,
   listRunsRequestSchema,
@@ -181,8 +185,11 @@ import {
   revealFileArtifactResultSchema,
   revokeSkillTrustRequestSchema,
   runArtifactSourceDeclarationSchema,
+  runDiagnosticIssueMarkResponseSchema,
   runDiagnosticNodeDetailResponseSchema,
+  runDiagnosticsHistoryPageResponseSchema,
   runDiagnosticsPageResponseSchema,
+  runDiagnosticsSourcesResponseSchema,
   runDiagnosticsSummaryResponseSchema,
   runSettingsSchema,
   runSourcePreviewSchema,
@@ -226,6 +233,7 @@ import {
   setMemorySettingsRequestSchema,
   setMemoryStatusRequestSchema,
   setModelEnabledRequestSchema,
+  setRunDiagnosticIssueMarkRequestSchema,
   setScheduleLifecycleRequestSchema,
   setSkillEnabledRequestSchema,
   setSkillTrustRequestSchema,
@@ -310,6 +318,8 @@ import type { MemoryService } from '../services/memory-service';
 import { probeModelConnection } from '../services/model-connectivity';
 import type { NotificationService } from '../services/notification-service';
 import { ResearchDraftService } from '../services/research-draft-service';
+import { RunDiagnosticPackageService } from '../services/run-diagnostic-package-service';
+import { RunDiagnosticsSourcesService } from '../services/run-diagnostics-sources';
 import type { RunService } from '../services/run-service';
 import { nextTimes, resolveSchedulePeriod } from '../services/schedule-calendar';
 import type { ScheduleDispatchService } from '../services/schedule-dispatch-service';
@@ -375,6 +385,7 @@ export interface IpcDependencies {
   readonly getWindow: () => BrowserWindow | null;
   /** 启动期默认空间初始化选定的根目录；已有数据库保留旧默认路径。 */
   readonly getDefaultWorkspaceRoot: () => string;
+  readonly getApplicationVersion?: () => string;
 }
 
 /** 导出文件名里不能出现的字符，统一替换为连字符。 */
@@ -597,7 +608,12 @@ export function registerIpc(deps: IpcDependencies): void {
   registerWindowChannels(deps);
 }
 
-function registerRunChannels({ store, runs }: IpcDependencies): void {
+function registerRunChannels(deps: IpcDependencies): void {
+  const { store, runs, knowledgeVault } = deps;
+  const sources = new RunDiagnosticsSourcesService(store, knowledgeVault);
+  const diagnosticPackage = new RunDiagnosticPackageService(store, sources, {
+    ...(deps.getApplicationVersion ? { applicationVersion: deps.getApplicationVersion } : {}),
+  });
   const isDiagnosticsScopeValid = (input: {
     workspaceId: string;
     taskId: string;
@@ -639,6 +655,12 @@ function registerRunChannels({ store, runs }: IpcDependencies): void {
         : null,
   );
   handleInput(
+    IpcChannel.GetRunDiagnosticsSources,
+    getRunDiagnosticsSummaryRequestSchema,
+    runDiagnosticsSourcesResponseSchema,
+    (input) => (isDiagnosticsScopeValid(input) ? (sources.get(input) ?? null) : null),
+  );
+  handleInput(
     IpcChannel.ListRunDiagnosticsPage,
     listRunDiagnosticsPageRequestSchema,
     runDiagnosticsPageResponseSchema,
@@ -654,6 +676,27 @@ function registerRunChannels({ store, runs }: IpcDependencies): void {
     },
   );
   handleInput(
+    IpcChannel.ListRunDiagnosticsHistory,
+    listRunDiagnosticsHistoryRequestSchema,
+    runDiagnosticsHistoryPageResponseSchema,
+    (input) => store.runDiagnostics.getHistoryPage(input),
+  );
+  handleInput(
+    IpcChannel.GetRunDiagnosticIssueMark,
+    getRunDiagnosticIssueMarkRequestSchema,
+    runDiagnosticIssueMarkResponseSchema,
+    (input) =>
+      isDiagnosticsScopeValid(input)
+        ? (store.runDiagnostics.getIssueMark(input.runId) ?? null)
+        : null,
+  );
+  handleInput(
+    IpcChannel.SetRunDiagnosticIssueMark,
+    setRunDiagnosticIssueMarkRequestSchema,
+    runDiagnosticIssueMarkResponseSchema,
+    (input) => store.runDiagnostics.setIssueMark(input, Date.now()),
+  );
+  handleInput(
     IpcChannel.GetRunDiagnosticNodeDetail,
     getRunDiagnosticNodeDetailRequestSchema,
     runDiagnosticNodeDetailResponseSchema,
@@ -661,6 +704,22 @@ function registerRunChannels({ store, runs }: IpcDependencies): void {
       isDiagnosticsScopeValid(input)
         ? (store.runDiagnostics.getNodeDetail(input.runId, input.nodeId) ?? null)
         : null,
+  );
+  handleInput(
+    IpcChannel.ExportRunDiagnosticPackage,
+    exportRunDiagnosticPackageRequestSchema,
+    exportRunDiagnosticPackageResultSchema,
+    async (input) => {
+      const exported = diagnosticPackage.create(input);
+      const result = await showSaveDialog(deps, {
+        title: '导出 Run 诊断包',
+        defaultPath: 'betterwork-run-diagnostics.json',
+        filters: [{ name: 'JSON', extensions: ['json'] }],
+      });
+      if (result.canceled || !result.filePath) return { cancelled: true };
+      await writeFile(result.filePath, exported.json, { encoding: 'utf8', mode: 0o600 });
+      return { cancelled: false, byteLength: exported.byteLength };
+    },
   );
   handleOptionalInput(
     IpcChannel.ListRuns,

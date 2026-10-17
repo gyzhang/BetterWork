@@ -88,6 +88,7 @@ import type { NotificationService } from './notification-service';
 import type { ResolvedRunContext } from './run-context-resolver';
 import { resolveRunContext } from './run-context-resolver';
 import { isRunTerminalEvent, RunEventLifecycle } from './run-event-lifecycle';
+import { type RunHostDiagnosticRecorder } from './run-host-diagnostic-recorder';
 import { createRunToolContext } from './run-tool-context';
 import { RunToolResultAdapter } from './run-tool-result-adapter';
 import { createQianfanSearchClient } from './search-engine-service';
@@ -226,6 +227,7 @@ export interface RunServiceDependencies {
   readonly knowledgeSearchService?: KnowledgeSearchService;
   readonly documentExtractor?: DocumentExtractor;
   readonly onScheduledRunTerminal?: (runId: string) => Promise<unknown>;
+  readonly runHostDiagnosticRecorder?: RunHostDiagnosticRecorder;
 }
 
 const productionDependencyKeys = {
@@ -248,6 +250,7 @@ const productionDependencyKeys = {
   knowledgeSearchService: true,
   documentExtractor: true,
   onScheduledRunTerminal: true,
+  runHostDiagnosticRecorder: true,
 } satisfies Record<keyof RunServiceDependencies, true>;
 
 /** 生产装配边界：接线错误在任何 Run 派发前失败，错误只包含依赖名。 */
@@ -288,8 +291,13 @@ export class RunService {
   private readonly knowledgeSearchService: KnowledgeSearchService | undefined;
   private readonly documentExtractor: DocumentExtractor | undefined;
   private readonly onScheduledRunTerminal: ((runId: string) => Promise<unknown>) | undefined;
+  private readonly runHostDiagnosticRecorder: RunHostDiagnosticRecorder | undefined;
   private stopping = false;
   private readonly activeRuns = new Map<string, ActiveRun>();
+  private readonly skillDispatchOperations = new Map<
+    string,
+    { runId: string; toolCallId: string; operationId: string }
+  >();
   private readonly consumePromises = new Map<string, Promise<void>>();
   private readonly scheduledOutcomePromises = new Map<string, Promise<void>>();
   private readonly engine = new ReActAgentEngine();
@@ -337,6 +345,7 @@ export class RunService {
     this.knowledgeSearchService = ports.knowledgeSearchService;
     this.documentExtractor = ports.documentExtractor;
     this.onScheduledRunTerminal = ports.onScheduledRunTerminal;
+    this.runHostDiagnosticRecorder = ports.runHostDiagnosticRecorder;
     this.toolResultAdapter = new RunToolResultAdapter({
       store: this.store,
       getMcpBinding: (runId, toolName) => this.mcpClientService?.getRunToolBinding(runId, toolName),
@@ -348,6 +357,9 @@ export class RunService {
       dispatch: (event) => this.dispatch(event),
       ...(skillExecution ? { finishSkills: (runId) => skillExecution.finishRun(runId) } : {}),
       ...(mcpClient ? { releaseMcp: (runId) => mcpClient.releaseRun(runId) } : {}),
+      ...(this.runHostDiagnosticRecorder
+        ? { runHostDiagnosticRecorder: this.runHostDiagnosticRecorder }
+        : {}),
     });
   }
 
@@ -493,15 +505,25 @@ export class RunService {
     let continuitySnapshot: RunContinuityContext;
     let continuityPlan: TaskContinuityContextPlan;
     try {
-      const prepared = this.prepareTaskContinuityContext(input.taskId, runId);
+      const prepare = () => {
+        const prepared = this.prepareTaskContinuityContext(input.taskId, runId);
+        const snapshot = this.store.taskContinuity.prepareRunContext({
+          runId,
+          taskId: input.taskId,
+          revisionId: prepared.revisionId,
+          brief: prepared.plan.brief,
+          omissions: prepared.plan.omissions,
+        });
+        return { plan: prepared.plan, snapshot };
+      };
+      const prepared = this.runHostDiagnosticRecorder
+        ? this.runHostDiagnosticRecorder.observeSync(
+            { runId, phase: 'prepare', errorCode: 'prepare-failed' },
+            prepare,
+          )
+        : prepare();
       continuityPlan = prepared.plan;
-      continuitySnapshot = this.store.taskContinuity.prepareRunContext({
-        runId,
-        taskId: input.taskId,
-        revisionId: prepared.revisionId,
-        brief: continuityPlan.brief,
-        omissions: continuityPlan.omissions,
-      });
+      continuitySnapshot = prepared.snapshot;
     } catch (error) {
       this.activeRuns.delete(runId);
       this.eventLifecycle.fail(runId, `Task Continuity 简报准备失败：${describeError(error)}`);
@@ -754,6 +776,9 @@ export class RunService {
       if (scheduledOutcome) await scheduledOutcome;
       this.scheduledOutcomePromises.delete(runId);
       this.activeRuns.delete(runId);
+      for (const [executionId, parent] of this.skillDispatchOperations) {
+        if (parent.runId === runId) this.skillDispatchOperations.delete(executionId);
+      }
     }
   }
 
@@ -1612,31 +1637,53 @@ export class RunService {
     runId: string,
     input: ArtifactRegisterInput,
   ): Promise<ArtifactRegisterOutput> {
-    if (!this.fileArtifactService) {
+    const fileArtifactService = this.fileArtifactService;
+    if (!fileArtifactService) {
       throw new Error('File artifact service is not available');
     }
-    const inputs = input.inputRelations ?? [];
-    if (inputs.length > 0) this.artifactDeclarations.validate(inputs, runId);
-    const result = await this.fileArtifactService.register({
-      runId,
-      executionId: input.executionId,
-      outputId: input.outputId,
-      ...(input.artifactId ? { artifactId: input.artifactId } : {}),
-      title: input.title,
-      ...(input.mimeType ? { mimeType: input.mimeType } : {}),
-      ...(input.description ? { description: input.description } : {}),
-      ...(input.validation ? { validation: input.validation } : {}),
-      inputRelations: inputs,
-    });
-    return {
-      artifactId: result.artifactId,
-      versionId: result.versionId,
-      versionNumber: result.versionNumber,
-      fileKey: result.fileKey,
-      fileHash: result.fileHash,
-      fileSize: result.fileSize,
-      message: `文件成果已登记：${input.title}`,
+    const publish = async (): Promise<ArtifactRegisterOutput> => {
+      const inputs = input.inputRelations ?? [];
+      if (inputs.length > 0) this.artifactDeclarations.validate(inputs, runId);
+      const result = await fileArtifactService.register({
+        runId,
+        executionId: input.executionId,
+        outputId: input.outputId,
+        ...(input.artifactId ? { artifactId: input.artifactId } : {}),
+        title: input.title,
+        ...(input.mimeType ? { mimeType: input.mimeType } : {}),
+        ...(input.description ? { description: input.description } : {}),
+        ...(input.validation ? { validation: input.validation } : {}),
+        inputRelations: inputs,
+      });
+      return {
+        artifactId: result.artifactId,
+        versionId: result.versionId,
+        versionNumber: result.versionNumber,
+        fileKey: result.fileKey,
+        fileHash: result.fileHash,
+        fileSize: result.fileSize,
+        message: `文件成果已登记：${input.title}`,
+      };
     };
+    const execution = this.store.executions.getExecution(input.executionId);
+    if (!this.runHostDiagnosticRecorder || !execution || execution.runId !== runId) {
+      return publish();
+    }
+    const dispatchParent = this.skillDispatchOperations.get(execution.id);
+    return this.runHostDiagnosticRecorder.observeWithOperation(
+      {
+        kind: 'skill-host',
+        phase: 'publish',
+        runId,
+        executionId: execution.id,
+        toolCallId: execution.toolCallId,
+        ...(dispatchParent?.runId === runId && dispatchParent.toolCallId === execution.toolCallId
+          ? { parentOperationId: dispatchParent.operationId }
+          : {}),
+        errorCode: 'publish-failed',
+      },
+      async () => publish(),
+    );
   }
 
   /**
@@ -1647,86 +1694,109 @@ export class RunService {
     runId: string,
     input: SkillCommandExecuteInput,
   ): Promise<SkillCommandExecuteOutput> {
-    if (!this.skillExecutionService) {
+    const skillExecutionService = this.skillExecutionService;
+    if (!skillExecutionService) {
       throw new Error('Skill execution service is not available');
     }
-    const bindingId = input.bindingId;
-    const binding = this.store.executions.getBinding(bindingId);
-    if (!binding) throw new Error(`Binding ${bindingId} does not exist`);
-    if (binding.runId !== runId) {
-      throw new Error(`Binding ${bindingId} does not belong to run ${runId}`);
-    }
-    const skill = this.store.skills.getBoundDetail(
-      binding.skillRevisionId,
-      binding.profileRevisionId,
-    );
-    if (!skill) throw new Error('Skill not found for binding');
-    if (!skill.enabled) throw new Error(`Skill「${skill.name}」已停用`);
-    if (!this.store.executions.isBindingAuthorized(bindingId)) {
-      throw new Error(`Skill「${skill.name}」尚未信任`);
-    }
-    const profile = skill.runtimeProfile;
-    if (!profile) throw new Error('Skill has no runtime profile');
-    const command = profile.profile.commands.find((cmd) => cmd.commandId === input.commandId);
-    if (!command) {
-      throw new Error(`Command ${input.commandId} is not registered in this Skill profile`);
-    }
-    const activeRun = this.activeRuns.get(runId);
-    if (!activeRun || activeRun.controller.signal.aborted)
-      throw new Error(`Run ${runId} is not active`);
-    z.fromJSONSchema(command.argumentSchema).parse(input.args);
-    const workRelativePath = path.join(
-      '.betterwork',
-      'tasks',
-      activeRun.taskId,
-      'runs',
-      runId,
-      'work',
-    );
-    const cwd = path.dirname(
-      managedPath(activeRun.workspacePath, path.join(workRelativePath, '.ready'), true),
-    );
-    const toolchains = await this.resolveToolchainSnapshots(
-      binding.dependencySnapshotIds,
-      profile.profile.toolchainRequirements,
-    );
-    if (command.validatorId) {
-      throw new Error('此 Skill 使用旧版校验器标识；请重新导入包含声明式执行契约的包');
-    }
-    if (!this.skillExecutionService) throw new Error('Skill execution service is not available');
-    const resourceRoot = await this.skillService.verifyResourceRoot(skill);
-    if (!binding.environmentId || !this.dependencies) throw new Error('绑定的运行环境不可用');
-    const python = this.dependencies.resolveEnvironmentPython(binding.environmentId);
-    const executionId = randomUUID();
-    const resolved = resolveSkillCommand(command, input.args, {
-      skillRoot: resourceRoot,
-      toolchainRoots: toolchains.roots,
-      managedPythonPath: python,
-      workDir: cwd,
-      executionId,
-    });
-    const env = { ...this.buildCleanEnv(), ...toolchains.environment };
-    const execution = await this.skillExecutionService.startExecution({
-      executionId,
-      runId,
-      bindingId,
-      signal: this.runSignal(runId),
-      toolCallId: input.toolCallId,
-      commandId: input.commandId,
-      args: input.args,
-      argv: resolved.argv,
-      executable: resolved.executable,
-      cwd: resolved.cwd,
-      env,
-      timeoutMs: command.timeoutMs,
-      maxOutputBytes: 32 * 1024,
-      maxLogBytes: 10 * 1024 * 1024,
-      expectedOutputs: resolved.expectedOutputs,
-      outputContracts: resolved.outputContracts,
-      requireCompleteStdout: resolved.requireCompleteStdout,
-      workDirKey: createHash('sha256').update(cwd).digest('hex'),
-    });
-    const awaited = await this.skillExecutionService.awaitExecution(execution.id);
+    const dispatch = async (parentOperationId?: string): Promise<ScriptExecution> => {
+      const bindingId = input.bindingId;
+      const binding = this.store.executions.getBinding(bindingId);
+      if (!binding) throw new Error(`Binding ${bindingId} does not exist`);
+      if (binding.runId !== runId) {
+        throw new Error(`Binding ${bindingId} does not belong to run ${runId}`);
+      }
+      const skill = this.store.skills.getBoundDetail(
+        binding.skillRevisionId,
+        binding.profileRevisionId,
+      );
+      if (!skill) throw new Error('Skill not found for binding');
+      if (!skill.enabled) throw new Error(`Skill「${skill.name}」已停用`);
+      if (!this.store.executions.isBindingAuthorized(bindingId)) {
+        throw new Error(`Skill「${skill.name}」尚未信任`);
+      }
+      const profile = skill.runtimeProfile;
+      if (!profile) throw new Error('Skill has no runtime profile');
+      const command = profile.profile.commands.find((cmd) => cmd.commandId === input.commandId);
+      if (!command) {
+        throw new Error(`Command ${input.commandId} is not registered in this Skill profile`);
+      }
+      const activeRun = this.activeRuns.get(runId);
+      if (!activeRun || activeRun.controller.signal.aborted)
+        throw new Error(`Run ${runId} is not active`);
+      z.fromJSONSchema(command.argumentSchema).parse(input.args);
+      const workRelativePath = path.join(
+        '.betterwork',
+        'tasks',
+        activeRun.taskId,
+        'runs',
+        runId,
+        'work',
+      );
+      const cwd = path.dirname(
+        managedPath(activeRun.workspacePath, path.join(workRelativePath, '.ready'), true),
+      );
+      const toolchains = await this.resolveToolchainSnapshots(
+        binding.dependencySnapshotIds,
+        profile.profile.toolchainRequirements,
+      );
+      if (command.validatorId) {
+        throw new Error('此 Skill 使用旧版校验器标识；请重新导入包含声明式执行契约的包');
+      }
+      const resourceRoot = await this.skillService.verifyResourceRoot(skill);
+      if (!binding.environmentId || !this.dependencies) throw new Error('绑定的运行环境不可用');
+      const python = this.dependencies.resolveEnvironmentPython(binding.environmentId);
+      const executionId = randomUUID();
+      const resolved = resolveSkillCommand(command, input.args, {
+        skillRoot: resourceRoot,
+        toolchainRoots: toolchains.roots,
+        managedPythonPath: python,
+        workDir: cwd,
+        executionId,
+      });
+      const env = { ...this.buildCleanEnv(), ...toolchains.environment };
+      const execution = await skillExecutionService.startExecution({
+        executionId,
+        ...(parentOperationId ? { parentOperationId } : {}),
+        runId,
+        bindingId,
+        signal: this.runSignal(runId),
+        toolCallId: input.toolCallId,
+        commandId: input.commandId,
+        args: input.args,
+        argv: resolved.argv,
+        executable: resolved.executable,
+        cwd: resolved.cwd,
+        env,
+        timeoutMs: command.timeoutMs,
+        maxOutputBytes: 32 * 1024,
+        maxLogBytes: 10 * 1024 * 1024,
+        expectedOutputs: resolved.expectedOutputs,
+        outputContracts: resolved.outputContracts,
+        requireCompleteStdout: resolved.requireCompleteStdout,
+        workDirKey: createHash('sha256').update(cwd).digest('hex'),
+      });
+      if (parentOperationId) {
+        this.skillDispatchOperations.set(execution.id, {
+          runId,
+          toolCallId: input.toolCallId,
+          operationId: parentOperationId,
+        });
+      }
+      return execution;
+    };
+    const execution = this.runHostDiagnosticRecorder
+      ? await this.runHostDiagnosticRecorder.observeWithOperation(
+          {
+            kind: 'skill-host',
+            phase: 'dispatch',
+            runId,
+            toolCallId: input.toolCallId,
+            errorCode: 'dispatch-failed',
+          },
+          (observation) => dispatch(observation.recorded ? observation.operationId : undefined),
+        )
+      : await dispatch();
+    const awaited = await skillExecutionService.awaitExecution(execution.id);
     return this.formatExecutionResult(awaited);
   }
 
