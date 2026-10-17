@@ -5,6 +5,7 @@ import type {
   RunDiagnosticNode,
   RunDiagnosticsPage,
   RunDiagnosticsScopeRequest,
+  RunDiagnosticsSources,
   RunDiagnosticsSummary,
 } from '@betterwork/agent-protocol';
 import { act, renderHook, waitFor } from '@testing-library/react';
@@ -126,6 +127,8 @@ const messageDeltaEvent = (runId: string, sequence: number): AgentRuntimeEvent =
 
 const getSummary =
   vi.fn<(input: RunDiagnosticsScopeRequest) => Promise<RunDiagnosticsSummary | null>>();
+const getSources =
+  vi.fn<(input: RunDiagnosticsScopeRequest) => Promise<RunDiagnosticsSources | null>>();
 const listPage =
   vi.fn<
     (input: RunDiagnosticsScopeRequest & { pageSize: number }) => Promise<RunDiagnosticsPage | null>
@@ -141,6 +144,7 @@ const installApi = (): void => {
     value: {
       runs: {
         getDiagnosticsSummary: getSummary,
+        getDiagnosticsSources: getSources,
         listDiagnosticsPage: listPage,
         listEvents,
         onEvent,
@@ -157,6 +161,7 @@ const emit = (event: AgentRuntimeEvent): void => {
 afterEach(() => {
   Reflect.deleteProperty(window, 'betterwork');
   getSummary.mockReset();
+  getSources.mockReset();
   listPage.mockReset();
   listEvents.mockReset();
   onEvent.mockReset();
@@ -212,6 +217,7 @@ describe('useRunDiagnostics', () => {
     await act(async () => firstPage.resolve(pageOf('run-a', [])));
     await waitFor(() => expect(result.current.nodes.map((node) => node.id)).toEqual(['model']));
     expect(result.current.summary?.runId).toBe('run-a');
+    expect(getSources).toHaveBeenCalledWith(scopeOf('run-a'));
     expect(listPage.mock.calls.length).toBeGreaterThanOrEqual(2);
     const pageCount = listPage.mock.calls.length;
     act(() => emit(toolCompletedEvent('run-a', 4)));

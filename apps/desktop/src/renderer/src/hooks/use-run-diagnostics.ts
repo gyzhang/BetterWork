@@ -4,6 +4,7 @@ import {
   type RunDiagnosticNode,
   type RunDiagnosticsCursor,
   type RunDiagnosticsScopeRequest,
+  type RunDiagnosticsSources,
   type RunDiagnosticsSummary,
 } from '@betterwork/agent-protocol';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -18,6 +19,7 @@ import { mergeRunEvents } from '../lib/run-events';
 
 export interface RunDiagnosticsState {
   summary: RunDiagnosticsSummary | undefined;
+  sources: RunDiagnosticsSources | undefined;
   nodes: RunDiagnosticNode[];
   loading: boolean;
   error: string;
@@ -26,6 +28,7 @@ export interface RunDiagnosticsState {
 
 const emptyState = (): Omit<RunDiagnosticsState, 'refresh'> => ({
   summary: undefined,
+  sources: undefined,
   nodes: [],
   loading: false,
   error: '',
@@ -103,13 +106,15 @@ export function useRunDiagnostics(scope?: RunDiagnosticsScopeRequest): RunDiagno
         try {
           do {
             refreshPending = false;
-            const [summary, nodes] = await Promise.all([
+            const [summary, nodes, sources] = await Promise.all([
               window.betterwork.runs.getDiagnosticsSummary(selectedScope),
               loadPages(),
+              window.betterwork.runs.getDiagnosticsSources(selectedScope),
             ]);
             if (!isCurrent()) return;
             setState((current) => ({
               summary: summary ?? undefined,
+              sources: sources ?? undefined,
               nodes: summary ? mergeRunDiagnosticNodes(current.nodes, nodes) : [],
               loading: false,
               error: '',

@@ -726,7 +726,7 @@ UI Foundation 首批提供四套成对色系：
 | `Composer` | `components/Composer.tsx` | 任务要求卡与固定高度工具栏分离；工具栏与窗口底部留 `--space-12`，材料变化不推挤输入卡；idle/starting/running 与 locked 分列 |
 | `ContextPanel` | `components/ContextPanel.tsx` | 可完全收起的任务上下文，按过程/资料/记忆/简报/成果分组；资料页管理本次材料用途与移除 |
 | `ProcessContext` | `components/context/ProcessContext.tsx` | 过程页签的连续简报表单、工作阶段与执行历史；保留目标/进度冲突及精确来源回看 |
-| `RunExecutionDetails` | `components/context/RunExecutionDetails.tsx` | 当前/历史 Run 的逐轮模型与工具执行链、用量和状态；复用 Modal/Tabs/ListRow/Disclosure，工具载荷按需读取；不展示 reasoning 或模型请求 |
+| `RunExecutionDetails` | `components/context/RunExecutionDetails.tsx` | 当前/历史 Run 的逐轮模型与工具执行链、精确工作依据、用量和状态；工作依据按 Run 固定修订与读取足迹回看；复用 Modal/Tabs/ListRow/Disclosure，工具载荷按需读取；不展示正文、reasoning 或模型请求 |
 | `SourcesContext` | `components/context/SourcesContext.tsx` | 资料页签的本期定时来源、本次材料、MCP 选择与逐 Run 已查阅来源；区间回看保持精确修订 |
 | `MemoryContext` | `components/context/MemoryContext.tsx` | 记忆页签的建议、下次范围、本任务排除、本次运行登记与历史调整；各类事实与反馈保持独立出口 |
 | `ComposerCapabilityPicker` | `components/ComposerCapabilityPicker.tsx` | Composer 的能力/材料选择；技能摘要可打开管理，材料按类别计数，锁定原因并入材料摘要；PopoverMenu、ActionBar 组合 |

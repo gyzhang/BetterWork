@@ -8,6 +8,7 @@ import type {
   RunDiagnosticNodeDetail,
   RunDiagnosticsPage,
   RunDiagnosticsScopeRequest,
+  RunDiagnosticsSources,
   RunDiagnosticsSummary,
 } from '@betterwork/agent-protocol';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -109,8 +110,41 @@ const pageOf = (
     ? { summary: currentSummary, nodes: currentNodes, integrity: currentSummary.integrity }
     : null;
 
+const sourcesOf = (): RunDiagnosticsSources => ({
+  runId: 'run-a',
+  integrity: 'complete',
+  fixedContext: {
+    state: 'recorded',
+    model: {
+      reference: { mode: 'application-default' },
+      snapshot: { displayName: 'Fixture model', fingerprint: 'fixture-fingerprint' },
+      memoryPhase: 'dispatch-attempted',
+      dispatchAttemptedAt: 20,
+    },
+    skills: [],
+  },
+  materials: { state: 'recorded', selected: [], reads: [] },
+  memory: {
+    state: 'recorded',
+    phase: 'dispatch-attempted',
+    dispatchAttemptedAt: 20,
+    selectedItems: [],
+    reads: [],
+    replay: [],
+  },
+  continuity: {
+    state: 'not-recorded',
+    omissions: [],
+    sourceRunIds: [],
+    artifactVersionIds: [],
+  },
+  artifacts: { state: 'not-recorded', producedVersions: [], inputRelations: [] },
+});
+
 const getSummary =
   vi.fn<(input: RunDiagnosticsScopeRequest) => Promise<RunDiagnosticsSummary | null>>();
+const getSources =
+  vi.fn<(input: RunDiagnosticsScopeRequest) => Promise<RunDiagnosticsSources | null>>();
 const listPage =
   vi.fn<(input: ListRunDiagnosticsPageRequest) => Promise<RunDiagnosticsPage | null>>();
 const getDetail =
@@ -123,6 +157,7 @@ const installApi = (): void => {
     value: {
       runs: {
         getDiagnosticsSummary: getSummary,
+        getDiagnosticsSources: getSources,
         listDiagnosticsPage: listPage,
         getDiagnosticNodeDetail: getDetail,
         listEvents: vi.fn().mockResolvedValue([]),
@@ -164,6 +199,7 @@ afterEach(() => {
   cleanup();
   Reflect.deleteProperty(window, 'betterwork');
   getSummary.mockReset();
+  getSources.mockReset();
   listPage.mockReset();
   getDetail.mockReset();
   onEvent.mockReset();
@@ -196,6 +232,24 @@ describe('RunExecutionDetails', () => {
     expect(await screen.findByText(/customer notes/u)).toBeTruthy();
     expect(screen.getByText(/载荷已截断/u)).toBeTruthy();
     expect(getDetail).toHaveBeenCalledWith({ ...scope, nodeId: 'tool:tool-call-a' });
+  });
+
+  it('shows exact work sources and labels dispatch-attempted without claiming delivery', async () => {
+    installApi();
+    getSummary.mockResolvedValue(summary);
+    getSources.mockResolvedValue(sourcesOf());
+    listPage.mockResolvedValue(pageOf());
+    onEvent.mockReturnValue(vi.fn());
+
+    render(<RunExecutionDetails scope={scope} onClose={vi.fn()} />);
+    fireEvent.click(await screen.findByRole('tab', { name: '工作依据' }));
+
+    expect(await screen.findByText('工作依据：记录完整')).toBeTruthy();
+    expect(
+      screen.getByText('记忆：选择 0 条，读取足迹 0 条；已记录派发尝试（不代表服务端已收到）。'),
+    ).toBeTruthy();
+    expect(screen.getByText('模型：Fixture model')).toBeTruthy();
+    expect(getSources).toHaveBeenCalledWith(scope);
   });
 
   it('distinguishes old unavailable history and partial integrity from an empty Run', async () => {

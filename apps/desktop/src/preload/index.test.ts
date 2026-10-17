@@ -287,11 +287,13 @@ describe('run preload API', () => {
     const scope = { workspaceId: 'workspace-1', taskId: 'task-1', runId: 'run-1' };
     await Promise.all([
       api().runs.getDiagnosticsSummary(scope),
+      api().runs.getDiagnosticsSources(scope),
       api().runs.listDiagnosticsPage(scope),
       api().runs.getDiagnosticNodeDetail({ ...scope, nodeId: 'tool:tool-1' }),
     ]);
     expect(mocks.invoke.mock.calls).toEqual([
       [IpcChannel.GetRunDiagnosticsSummary, scope],
+      [IpcChannel.GetRunDiagnosticsSources, scope],
       [IpcChannel.ListRunDiagnosticsPage, { ...scope, pageSize: 50 }],
       [IpcChannel.GetRunDiagnosticNodeDetail, { ...scope, nodeId: 'tool:tool-1' }],
     ]);
@@ -311,6 +313,7 @@ describe('run preload API', () => {
     ).toThrow();
     expect(() => api().runs.getDiagnosticNodeDetail({ ...scope, nodeId: '' })).toThrow();
     await expect(api().runs.getDiagnosticsSummary(scope)).resolves.toBeNull();
+    await expect(api().runs.getDiagnosticsSources(scope)).resolves.toBeNull();
 
     mocks.invoke.mockResolvedValueOnce({});
     await expect(api().runs.getDiagnosticsSummary(scope)).rejects.toThrow();

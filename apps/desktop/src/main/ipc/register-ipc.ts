@@ -183,6 +183,7 @@ import {
   runArtifactSourceDeclarationSchema,
   runDiagnosticNodeDetailResponseSchema,
   runDiagnosticsPageResponseSchema,
+  runDiagnosticsSourcesResponseSchema,
   runDiagnosticsSummaryResponseSchema,
   runSettingsSchema,
   runSourcePreviewSchema,
@@ -310,6 +311,7 @@ import type { MemoryService } from '../services/memory-service';
 import { probeModelConnection } from '../services/model-connectivity';
 import type { NotificationService } from '../services/notification-service';
 import { ResearchDraftService } from '../services/research-draft-service';
+import { RunDiagnosticsSourcesService } from '../services/run-diagnostics-sources';
 import type { RunService } from '../services/run-service';
 import { nextTimes, resolveSchedulePeriod } from '../services/schedule-calendar';
 import type { ScheduleDispatchService } from '../services/schedule-dispatch-service';
@@ -597,7 +599,8 @@ export function registerIpc(deps: IpcDependencies): void {
   registerWindowChannels(deps);
 }
 
-function registerRunChannels({ store, runs }: IpcDependencies): void {
+function registerRunChannels({ store, runs, knowledgeVault }: IpcDependencies): void {
+  const sources = new RunDiagnosticsSourcesService(store, knowledgeVault);
   const isDiagnosticsScopeValid = (input: {
     workspaceId: string;
     taskId: string;
@@ -637,6 +640,12 @@ function registerRunChannels({ store, runs }: IpcDependencies): void {
       isDiagnosticsScopeValid(input)
         ? (store.runDiagnostics.getSummary(input.runId) ?? null)
         : null,
+  );
+  handleInput(
+    IpcChannel.GetRunDiagnosticsSources,
+    getRunDiagnosticsSummaryRequestSchema,
+    runDiagnosticsSourcesResponseSchema,
+    (input) => (isDiagnosticsScopeValid(input) ? (sources.get(input) ?? null) : null),
   );
   handleInput(
     IpcChannel.ListRunDiagnosticsPage,

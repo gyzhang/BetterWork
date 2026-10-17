@@ -57,6 +57,7 @@ import {
   resolveMemoryConflictRequestSchema,
   resultSchema,
   retryScheduleOutputRequestSchema,
+  runDiagnosticsSourcesSchema,
   runMaterialReadSchema,
   runMemoryContextSchema,
   runtimeEnvironmentSchema,
@@ -2474,6 +2475,141 @@ describe('MI 运行快照 v1/v2 兼容与优先预算字面量', () => {
       saveTaskContinuityBriefRequestSchema.safeParse({
         ...edit,
         progress: { ...edit.progress, authoredBy: 'assistant-summary' },
+      }).success,
+    ).toBe(false);
+  });
+});
+
+it('validates strict host diagnostic event variants and rejects unbounded data', () => {
+  const event = {
+    id: 'host-event-1',
+    runId: 'run-1',
+    operationId: 'operation-1',
+    diagnosticSequence: 0,
+    createdAt: 10,
+    kind: 'run-host',
+    phase: 'prepare',
+    state: 'started',
+    metadata: { outputBytes: 12, outputTruncated: true, result: 'success' },
+  } as const;
+
+  expect(hostDiagnosticEventSchema.safeParse(event).success).toBe(true);
+  expect(hostDiagnosticEventSchema.safeParse({ ...event, phase: 'execute' }).success).toBe(false);
+  expect(
+    hostDiagnosticEventSchema.safeParse({ ...event, metadata: { path: '/private/file' } }).success,
+  ).toBe(false);
+  expect(
+    hostDiagnosticEventSchema.safeParse({ ...event, metadata: { outputTruncated: 'yes' } }).success,
+  ).toBe(false);
+  expect(hostDiagnosticEventSchema.safeParse({ ...event, argv: ['secret'] }).success).toBe(false);
+  expect(
+    hostDiagnosticEventSchema.safeParse({
+      ...event,
+      kind: 'skill-host',
+      phase: 'dispatch',
+    }).success,
+  ).toBe(true);
+
+  it('accepts exact diagnostic source references without allowing source bodies or paths', () => {
+    const sources = {
+      runId: 'run-1',
+      integrity: 'complete',
+      fixedContext: {
+        state: 'recorded',
+        taskContextRevisionId: 'context-revision-1',
+        expert: {
+          state: 'recorded',
+          expertId: 'expert-1',
+          revisionId: 'expert-revision-1',
+          revision: 2,
+          name: 'Historical expert',
+        },
+        model: {
+          reference: { mode: 'profile', modelProfileId: 'model-profile-1' },
+          snapshot: {
+            displayName: 'Model snapshot',
+            fingerprint: 'a'.repeat(64),
+            modelProfileId: 'model-profile-1',
+          },
+          memoryPhase: 'dispatch-attempted',
+          dispatchAttemptedAt: 15,
+        },
+        skills: [],
+      },
+      materials: {
+        state: 'recorded',
+        selected: [
+          {
+            reference: {
+              kind: 'knowledge-revision',
+              documentId: 'document-1',
+              revisionId: 'knowledge-revision-1',
+              contentHash: 'b'.repeat(64),
+              title: 'Historical policy',
+              state: 'recorded',
+            },
+            purpose: 'rule',
+            addedFrom: 'user-input',
+            wasRead: false,
+          },
+        ],
+        reads: [],
+      },
+      memory: {
+        state: 'recorded',
+        recallVersion: 'memory-recall-v2',
+        phase: 'dispatch-attempted',
+        selectedItems: [
+          {
+            memoryId: 'memory-1',
+            revisionId: 'memory-revision-1',
+            contentHash: 'c'.repeat(64),
+            order: 1,
+            reason: 'pinned-rule',
+            score: 0,
+          },
+        ],
+        reads: [],
+        replay: [],
+      },
+      continuity: {
+        state: 'recorded',
+        revisionId: 'continuity-revision-1',
+        briefHash: 'd'.repeat(64),
+        preparedAt: 12,
+        firstProviderRequestAt: 15,
+        omissions: [],
+        sourceRunIds: ['prior-run-1'],
+        artifactVersionIds: [],
+      },
+      artifacts: { state: 'recorded', producedVersions: [], inputRelations: [] },
+    } as const;
+
+    expect(runDiagnosticsSourcesSchema.safeParse(sources).success).toBe(true);
+    expect(
+      runDiagnosticsSourcesSchema.safeParse({
+        ...sources,
+        materials: {
+          ...sources.materials,
+          selected: [
+            {
+              ...sources.materials.selected[0],
+              reference: {
+                ...sources.materials.selected[0].reference,
+                sourcePath: '/private/source.md',
+              },
+            },
+          ],
+        },
+      }).success,
+    ).toBe(false);
+    expect(
+      runDiagnosticsSourcesSchema.safeParse({
+        ...sources,
+        memory: {
+          ...sources.memory,
+          selectedItems: [{ ...sources.memory.selectedItems[0], content: 'private memory body' }],
+        },
       }).success,
     ).toBe(false);
   });

@@ -1316,6 +1316,11 @@ describe('registerIpc', () => {
       taskId: taskA.task.id,
       modelCallCount: 1,
     });
+    await expect(invoke(IpcChannel.GetRunDiagnosticsSources, scopeA)).resolves.toMatchObject({
+      runId: runA,
+      integrity: 'unavailable',
+      fixedContext: { state: 'not-recorded' },
+    });
     const page = await invoke(IpcChannel.ListRunDiagnosticsPage, scopeA);
     expect(page).toMatchObject({
       summary: { runId: runA },
@@ -1335,6 +1340,12 @@ describe('registerIpc', () => {
       invoke(IpcChannel.GetRunDiagnosticsSummary, {
         ...scopeA,
         taskId: taskB.task.id,
+      }),
+    ).resolves.toBeNull();
+    await expect(
+      invoke(IpcChannel.GetRunDiagnosticsSources, {
+        ...scopeA,
+        workspaceId: workspaceB.id,
       }),
     ).resolves.toBeNull();
     await expect(

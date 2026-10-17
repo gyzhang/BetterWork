@@ -194,6 +194,7 @@ import {
   runArtifactSourceDeclarationSchema,
   runDiagnosticNodeDetailResponseSchema,
   runDiagnosticsPageResponseSchema,
+  runDiagnosticsSourcesResponseSchema,
   runDiagnosticsSummaryResponseSchema,
   runSettingsSchema,
   runSourcePreviewSchema,
@@ -370,6 +371,11 @@ const runInvokeContracts = defineInvokeContracts({
     request: getRunDiagnosticsSummaryRequestSchema,
     response: runDiagnosticsSummaryResponseSchema,
   },
+  [IpcChannel.GetRunDiagnosticsSources]: {
+    channel: IpcChannel.GetRunDiagnosticsSources,
+    request: getRunDiagnosticsSummaryRequestSchema,
+    response: runDiagnosticsSourcesResponseSchema,
+  },
   [IpcChannel.ListRunDiagnosticsPage]: {
     channel: IpcChannel.ListRunDiagnosticsPage,
     request: listRunDiagnosticsPageRequestSchema,
@@ -474,6 +480,8 @@ const runInvokeMethods: InvokeMethodsByChannel<typeof runInvokeContracts> = {
     invokeContract(runInvokeContracts[IpcChannel.ListRunEvents], input),
   [IpcChannel.GetRunDiagnosticsSummary]: (input) =>
     invokeContract(runInvokeContracts[IpcChannel.GetRunDiagnosticsSummary], input),
+  [IpcChannel.GetRunDiagnosticsSources]: (input) =>
+    invokeContract(runInvokeContracts[IpcChannel.GetRunDiagnosticsSources], input),
   [IpcChannel.ListRunDiagnosticsPage]: (input) =>
     invokeContract(runInvokeContracts[IpcChannel.ListRunDiagnosticsPage], input),
   [IpcChannel.GetRunDiagnosticNodeDetail]: (input) =>
@@ -1736,6 +1744,7 @@ const api: BetterWorkDesktopApi = {
     list: (input) => runInvokeMethods[IpcChannel.ListRuns](input),
     listEvents: (input) => runInvokeMethods[IpcChannel.ListRunEvents](input),
     getDiagnosticsSummary: (input) => runInvokeMethods[IpcChannel.GetRunDiagnosticsSummary](input),
+    getDiagnosticsSources: (input) => runInvokeMethods[IpcChannel.GetRunDiagnosticsSources](input),
     listDiagnosticsPage: (input) => runInvokeMethods[IpcChannel.ListRunDiagnosticsPage](input),
     getDiagnosticNodeDetail: (input) =>
       runInvokeMethods[IpcChannel.GetRunDiagnosticNodeDetail](input),

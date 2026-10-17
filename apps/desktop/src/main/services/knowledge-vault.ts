@@ -843,6 +843,26 @@ export class KnowledgeVault {
     }));
   }
 
+  /** Return exact revision metadata for diagnostics without decoding revision text or locators. */
+  getMaterialRevision(revisionId: string): KnowledgeMaterialRevision | undefined {
+    const row = this.db
+      .prepare(
+        `SELECT id, document_id, revision, title, source_path, content_hash
+           FROM knowledge_revisions WHERE id = ?`,
+      )
+      .get(revisionId) as KnowledgeMaterialRevisionRow | undefined;
+    return row
+      ? {
+          id: row.id,
+          documentId: row.document_id,
+          revision: row.revision,
+          title: row.title,
+          sourcePath: row.source_path,
+          contentHash: row.content_hash,
+        }
+      : undefined;
+  }
+
   listRevisions(documentId: string): KnowledgeRevisionSummary[] {
     const rows = this.db
       .prepare(

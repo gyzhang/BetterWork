@@ -84,6 +84,9 @@ HostDiagnosticEvent 最小字段：id、runId、operationId、diagnosticSequence
 - summary：Run/Task/Session、持久终态、起止、调用/拒绝计数、已知用量及缺失调用数、recordingVersion/完整性。
 - node：独立节点 ID、显式父关系、类型、状态、实际执行与否、事件时间、可用耗时、可选 round/model/tool/execution 关联。不把两个来源序列拼成一个递增序列。
 - sources：引用当时固定的 ExpertRevision、Skill/环境绑定、model snapshot、材料读取、记忆修订/派发审计、连续上下文、ArtifactVersion；无法取得时给原因，不查询 latest 代替历史。
+- `run:diagnostics-sources` 使用 Run/Task/Workspace 同一范围请求与严格响应 Schema。固定上下文只投影精确修订 ID、版本号、状态和必要的模型显示名/指纹；Skill 环境只含状态、平台、lock hash 与依赖清单 hash。已选材料和读取足迹分开列出，只有 `read/parse` 可令 `wasRead=true`，`preview/search` 不能推断正文已采用。Knowledge/Artifact 通过精确 revision/version ID 读取元数据；输入快照核对 Workspace、hash、format 和 fileKey 绑定，但响应不含路径/fileKey/locator。
+- 记忆只回传选择身份/hash、读取身份与来源状态、重放身份及阶段时间；连续上下文只回传修订/hash/时间、省略原因和同 Task 的来源 Run/ArtifactVersion ID，不回传简报正文。成果只回传版本身份/hash、类型/校验元数据与已登记的精确输入关系，不回传标题、内容、Evidence 摘录或文件定位符。`dispatch-attempted` 只表示本地记录了派发尝试，不代表 Provider 服务端已收到。
+- revision、hash、Workspace/Run 归属不匹配时标记 unavailable 并降级整体完整性；缺少旧字段保持 `not-recorded`，不补取当前配置或 latest。完整性按字段白名单重新构造，不序列化底层 Repository 详情对象。
 - 查询必须验证 Run 真实归属；选中的 Task/Workspace 范围在 Main 校验。跨范围 ID 不返回其他对象明细，不依赖 Renderer 过滤。
 - 页面大小默认 50、上限 200；游标明确含来源边界及查询筛选身份。不把全量原始消息/工具载荷塞进 summary，节点载荷按需取；诊断详情文本最多 64 KiB UTF-8，带 truncated 标志，保留原事实不改写。
 
