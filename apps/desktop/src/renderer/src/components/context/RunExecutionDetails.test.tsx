@@ -3,16 +3,19 @@
 import type {
   AgentRuntimeEvent,
   GetRunDiagnosticNodeDetailRequest,
+  ListRunDiagnosticsHistoryRequest,
   ListRunDiagnosticsPageRequest,
   RunDiagnosticNode,
   RunDiagnosticNodeDetail,
   RunDiagnosticsChangedEvent,
+  RunDiagnosticsHistoryEntry,
+  RunDiagnosticsHistoryPage,
   RunDiagnosticsPage,
   RunDiagnosticsScopeRequest,
   RunDiagnosticsSources,
   RunDiagnosticsSummary,
 } from '@betterwork/agent-protocol';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -59,6 +62,68 @@ const summaryOf = (
   recordingVersion: 1,
   enabledSections: ['core'],
   integrity,
+});
+
+const historyStatsOf = (runCount = 1): RunDiagnosticsHistoryPage['stats'] => ({
+  runCount,
+  statusCounts: { completed: runCount, failed: 0, cancelled: 0, running: 0 },
+  runFailure: {
+    failedRunCount: 0,
+    denominatorRunCount: runCount,
+    excludedCancelledRunCount: 0,
+    excludedRunningRunCount: 0,
+    rate: runCount > 0 ? 0 : null,
+  },
+  integrityCounts: { complete: runCount, partial: 0, unavailable: 0 },
+  modelCallCount: runCount,
+  toolCallCount: runCount,
+  toolExecutionCount: runCount,
+  failedToolExecutionCount: 0,
+  rejectedToolCallCount: 0,
+  usage: {
+    promptTokens: { knownSubtotal: '0', knownCallCount: runCount, missingCallCount: 0 },
+    completionTokens: {
+      knownSubtotal: '8',
+      knownCallCount: 1,
+      missingCallCount: runCount > 0 ? 1 : 0,
+    },
+    totalTokens: { knownSubtotal: '12', knownCallCount: runCount, missingCallCount: 0 },
+  },
+  modelCallDurationMs: {
+    sampleCount: runCount,
+    ...(runCount > 0 ? { p50: 83, p95: 120 } : {}),
+    excludedCounts: {
+      pending: 0,
+      running: 0,
+      interrupted: 0,
+      unknown: 0,
+      missingMeasurement: 0,
+    },
+  },
+});
+
+const historyEntryOf = (
+  runId: string,
+  options: { taskId?: string; createdAt?: number; modelFingerprint?: string } = {},
+): RunDiagnosticsHistoryEntry => ({
+  summary: {
+    ...summaryOf('completed'),
+    runId,
+    taskId: options.taskId ?? 'task-a',
+  },
+  createdAt: options.createdAt ?? 1_792_000_000_000,
+  skillRevisionIds: [],
+  ...(options.modelFingerprint ? { modelFingerprint: options.modelFingerprint } : {}),
+});
+
+const historyPageOf = (
+  runs: RunDiagnosticsHistoryEntry[],
+  stats = historyStatsOf(runs.length),
+  nextCursor?: RunDiagnosticsHistoryPage['nextCursor'],
+): RunDiagnosticsHistoryPage => ({
+  runs,
+  stats,
+  ...(nextCursor ? { nextCursor } : {}),
 });
 
 const nodeOf = (
@@ -148,6 +213,8 @@ const getSources =
   vi.fn<(input: RunDiagnosticsScopeRequest) => Promise<RunDiagnosticsSources | null>>();
 const listPage =
   vi.fn<(input: ListRunDiagnosticsPageRequest) => Promise<RunDiagnosticsPage | null>>();
+const listHistory =
+  vi.fn<(input: ListRunDiagnosticsHistoryRequest) => Promise<RunDiagnosticsHistoryPage>>();
 const getDetail =
   vi.fn<(input: GetRunDiagnosticNodeDetailRequest) => Promise<RunDiagnosticNodeDetail | null>>();
 const onEvent = vi.fn<(listener: (event: AgentRuntimeEvent) => void) => () => void>();
@@ -163,6 +230,7 @@ const installApi = (): void => {
         getDiagnosticsSummary: getSummary,
         getDiagnosticsSources: getSources,
         listDiagnosticsPage: listPage,
+        listDiagnosticsHistory: listHistory,
         getDiagnosticNodeDetail: getDetail,
         listEvents: vi.fn().mockResolvedValue([]),
         onEvent,
@@ -206,6 +274,7 @@ afterEach(() => {
   getSummary.mockReset();
   getSources.mockReset();
   listPage.mockReset();
+  listHistory.mockReset();
   getDetail.mockReset();
   onEvent.mockReset();
   onDiagnosticsChanged.mockReset();
@@ -455,5 +524,148 @@ describe('RunExecutionDetails', () => {
 
     await waitFor(() => expect(screen.queryByRole('dialog', { name: '执行详情' })).toBeNull());
     expect(document.activeElement).toBe(opener);
+  });
+
+  it('shows workspace-filtered aggregate samples and opens a selected historical Run', async () => {
+    installApi();
+    const historicalRun = historyEntryOf('run-history', { modelFingerprint: 'model-version-one' });
+    listHistory.mockResolvedValue(historyPageOf([historicalRun]));
+    getSummary.mockImplementation(async (input) => ({
+      ...summaryOf('completed'),
+      runId: input.runId,
+      taskId: input.taskId,
+    }));
+    listPage.mockImplementation(async (input) => {
+      const currentSummary = {
+        ...summaryOf('completed'),
+        runId: input.runId,
+        taskId: input.taskId,
+      };
+      return pageOf(currentSummary, []);
+    });
+    getSources.mockResolvedValue(sourcesOf());
+    onEvent.mockReturnValue(vi.fn());
+
+    render(<RunExecutionDetails scope={scope} onClose={vi.fn()} />);
+    fireEvent.click(screen.getByRole('tab', { name: '记录与统计' }));
+
+    expect(
+      await screen.findByRole('button', { name: '查看 Run run-history 的执行详情' }),
+    ).toBeTruthy();
+    expect(listHistory).toHaveBeenCalledWith({
+      workspaceId: scope.workspaceId,
+      filter: { taskId: scope.taskId },
+    });
+    expect(screen.getByText('1 个匹配 Run 的统计')).toBeTruthy();
+    expect(screen.getByText(/已知小计 8 token；已知调用 1 次，未知调用 1 次/u)).toBeTruthy();
+    expect(screen.getByText(/模型版本 model-version-one/u)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: '查看 Run run-history 的执行详情' }));
+    expect(await screen.findByRole('button', { name: '返回打开时的 Run' })).toBeTruthy();
+    expect(getSummary).toHaveBeenLastCalledWith({
+      workspaceId: scope.workspaceId,
+      taskId: 'task-a',
+      runId: 'run-history',
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '返回打开时的 Run' }));
+    await waitFor(() =>
+      expect(getSummary).toHaveBeenLastCalledWith({
+        workspaceId: scope.workspaceId,
+        taskId: scope.taskId,
+        runId: scope.runId,
+      }),
+    );
+  });
+
+  it('discards late filter results and clears every condition back to workspace scope', async () => {
+    installApi();
+    const stalePage = deferred<RunDiagnosticsHistoryPage>();
+    const currentPage = deferred<RunDiagnosticsHistoryPage>();
+    listHistory
+      .mockResolvedValueOnce(historyPageOf([historyEntryOf('initial-run')]))
+      .mockReturnValueOnce(stalePage.promise)
+      .mockReturnValueOnce(currentPage.promise)
+      .mockResolvedValueOnce(historyPageOf([]));
+    getSummary.mockResolvedValue(summary);
+    listPage.mockResolvedValue(pageOf());
+    onEvent.mockReturnValue(vi.fn());
+
+    render(<RunExecutionDetails scope={scope} onClose={vi.fn()} />);
+    fireEvent.click(screen.getByRole('tab', { name: '记录与统计' }));
+    expect(
+      await screen.findByRole('button', { name: '查看 Run initial-run 的执行详情' }),
+    ).toBeTruthy();
+
+    const fingerprint = screen.getByRole('textbox', { name: '模型指纹' });
+    fireEvent.change(fingerprint, { target: { value: 'older-model' } });
+    fireEvent.click(screen.getByRole('button', { name: '应用筛选' }));
+    await waitFor(() => expect(listHistory).toHaveBeenCalledTimes(2));
+    fireEvent.change(fingerprint, { target: { value: 'newer-model' } });
+    fireEvent.click(screen.getByRole('button', { name: '应用筛选' }));
+    await waitFor(() => expect(listHistory).toHaveBeenCalledTimes(3));
+    expect(listHistory).toHaveBeenNthCalledWith(2, {
+      workspaceId: scope.workspaceId,
+      filter: { taskId: scope.taskId, modelFingerprint: 'older-model' },
+    });
+    expect(listHistory).toHaveBeenNthCalledWith(3, {
+      workspaceId: scope.workspaceId,
+      filter: { taskId: scope.taskId, modelFingerprint: 'newer-model' },
+    });
+
+    await act(async () => {
+      currentPage.resolve(historyPageOf([historyEntryOf('newer-run')]));
+      await currentPage.promise;
+    });
+    expect(
+      await screen.findByRole('button', { name: '查看 Run newer-run 的执行详情' }),
+    ).toBeTruthy();
+    await act(async () => {
+      stalePage.resolve(historyPageOf([historyEntryOf('stale-run')]));
+      await stalePage.promise;
+    });
+    expect(screen.queryByRole('button', { name: '查看 Run stale-run 的执行详情' })).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: '清除条件' }));
+    expect(await screen.findByText('暂无执行记录')).toBeTruthy();
+    await waitFor(() => expect(listHistory).toHaveBeenCalledTimes(4));
+    expect(listHistory).toHaveBeenLastCalledWith({ workspaceId: scope.workspaceId, filter: {} });
+  });
+
+  it('retries history failures and appends the next page without duplicating rows', async () => {
+    installApi();
+    const cursor = {
+      workspaceId: scope.workspaceId,
+      filter: { taskId: scope.taskId },
+      afterCreatedAt: 100,
+      afterRunId: 'run-first',
+    };
+    listHistory
+      .mockRejectedValueOnce(new Error('synthetic history failure'))
+      .mockResolvedValueOnce(
+        historyPageOf([historyEntryOf('run-first')], historyStatsOf(2), cursor),
+      )
+      .mockResolvedValueOnce(historyPageOf([historyEntryOf('run-second')], historyStatsOf(2)));
+    getSummary.mockResolvedValue(summary);
+    listPage.mockResolvedValue(pageOf());
+    onEvent.mockReturnValue(vi.fn());
+
+    render(<RunExecutionDetails scope={scope} onClose={vi.fn()} />);
+    fireEvent.click(screen.getByRole('tab', { name: '记录与统计' }));
+    expect(await screen.findByRole('alert')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '重试' }));
+    expect(
+      await screen.findByRole('button', { name: '查看 Run run-first 的执行详情' }),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '加载更多' }));
+    expect(
+      await screen.findByRole('button', { name: '查看 Run run-second 的执行详情' }),
+    ).toBeTruthy();
+    expect(listHistory).toHaveBeenLastCalledWith({
+      workspaceId: scope.workspaceId,
+      filter: { taskId: scope.taskId },
+      cursor,
+    });
+    expect(screen.getAllByText('Run run-first')).toHaveLength(1);
   });
 });

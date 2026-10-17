@@ -1,5 +1,8 @@
 import type {
   RunDiagnosticNode,
+  RunDiagnosticsHistoryEntry,
+  RunDiagnosticsHistoryFilter,
+  RunDiagnosticsHistoryStats,
   RunDiagnosticSourceReference,
   RunDiagnosticsScopeRequest,
   RunDiagnosticsSources,
@@ -9,6 +12,7 @@ import { useState } from 'react';
 
 import { useRunDiagnosticNodeDetail } from '../../hooks/use-run-diagnostic-node-detail';
 import { useRunDiagnostics } from '../../hooks/use-run-diagnostics';
+import { useRunDiagnosticsHistory } from '../../hooks/use-run-diagnostics-history';
 import { runStatusName, toolStageLabel } from '../../lib/labels';
 import {
   buildRunDiagnosticTree,
@@ -20,14 +24,50 @@ import { Badge, type BadgeTone } from '../Badge';
 import { Button } from '../Button';
 import { Disclosure } from '../Disclosure';
 import { EmptyNotice } from '../EmptyState';
+import { Field } from '../Field';
+import { FieldSelect } from '../FieldSelect';
 import { InlineError } from '../InlineError';
 import { ListRow } from '../ListRow';
 import { Modal } from '../Modal';
 import { SectionHeader } from '../SectionHeader';
 import { StatusNote } from '../StatusNote';
 import { Tab, TabList, TabPanel, Tabs } from '../Tabs';
+import { TextField } from '../TextField';
 
-type DetailsTab = 'chain' | 'timeline' | 'usage' | 'sources';
+type DetailsTab = 'chain' | 'timeline' | 'usage' | 'sources' | 'history';
+type HistoryTaskScope = 'task' | 'workspace';
+
+interface HistoryFilterDraft {
+  taskScope: HistoryTaskScope;
+  fromDate: string;
+  throughDate: string;
+  expertRevisionId: string;
+  skillRevisionId: string;
+  modelFingerprint: string;
+}
+
+const historyFilterDraft = (taskId?: string): HistoryFilterDraft => ({
+  taskScope: taskId ? 'task' : 'workspace',
+  fromDate: '',
+  throughDate: '',
+  expertRevisionId: '',
+  skillRevisionId: '',
+  modelFingerprint: '',
+});
+
+const localDateBoundary = (date: string, endOfDay: boolean): number | undefined => {
+  if (!date) return undefined;
+  const timestamp = new Date(`${date}T${endOfDay ? '23:59:59.999' : '00:00:00.000'}`).getTime();
+  return Number.isFinite(timestamp) ? timestamp : undefined;
+};
+
+const aggregateMetricValue = (
+  metric: RunDiagnosticsHistoryStats['usage']['promptTokens'],
+): string =>
+  `已知小计 ${metric.knownSubtotal} token；已知调用 ${metric.knownCallCount} 次，未知调用 ${metric.missingCallCount} 次`;
+
+const durationValue = (duration: number | undefined): string =>
+  duration === undefined ? '未记录' : `${duration} ms`;
 
 const nodeStatusName: Record<RunDiagnosticNode['status'], string> = {
   pending: '待开始',
@@ -164,11 +204,20 @@ export function RunExecutionDetails({
   scope: RunDiagnosticsScopeRequest;
   onClose: () => void;
 }): React.JSX.Element {
-  const diagnostics = useRunDiagnostics(scope);
+  const originalScopeKey = `${scope.workspaceId}\u0000${scope.taskId}\u0000${scope.runId}`;
+  const [inspectedRun, setInspectedRun] = useState<{
+    originScopeKey: string;
+    scope: RunDiagnosticsScopeRequest;
+  }>();
+  const activeScope =
+    inspectedRun?.originScopeKey === originalScopeKey ? inspectedRun.scope : scope;
+  const isInspectingHistoryRun = activeScope.runId !== scope.runId;
+  const diagnostics = useRunDiagnostics(activeScope);
   const [tab, setTab] = useState<DetailsTab>('chain');
   const [requestedTool, setRequestedTool] = useState<{ runId: string; nodeId: string }>();
-  const detailNodeId = requestedTool?.runId === scope.runId ? requestedTool.nodeId : undefined;
-  const detail = useRunDiagnosticNodeDetail(scope, detailNodeId);
+  const detailNodeId =
+    requestedTool?.runId === activeScope.runId ? requestedTool.nodeId : undefined;
+  const detail = useRunDiagnosticNodeDetail(activeScope, detailNodeId);
   const tree = buildRunDiagnosticTree(diagnostics.nodes);
   const treeNodes = flattenTree(tree);
   const timelineNodes = mergeRunDiagnosticNodes([], diagnostics.nodes);
@@ -205,6 +254,16 @@ export function RunExecutionDetails({
             <Button variant="quiet" size="sm" type="button" onClick={onClose}>
               关闭
             </Button>
+            {isInspectingHistoryRun && (
+              <Button
+                variant="quiet"
+                size="sm"
+                type="button"
+                onClick={() => setInspectedRun(undefined)}
+              >
+                返回打开时的 Run
+              </Button>
+            )}
           </>
         }
       />
@@ -214,6 +273,7 @@ export function RunExecutionDetails({
           <Tab value="timeline">时间轴</Tab>
           <Tab value="sources">工作依据</Tab>
           <Tab value="usage">用量与状态</Tab>
+          <Tab value="history">记录与统计</Tab>
         </TabList>
         <div className="run-execution-details-panels">
           <TabPanel value="chain" className="run-execution-details-panel">
@@ -248,7 +308,7 @@ export function RunExecutionDetails({
                     modelCallOrdinals={modelCallOrdinals}
                     detailNodeId={detailNodeId}
                     detail={detail}
-                    onLoadTool={(nodeId) => setRequestedTool({ runId: scope.runId, nodeId })}
+                    onLoadTool={(nodeId) => setRequestedTool({ runId: activeScope.runId, nodeId })}
                   />
                 ))}
               </ul>
@@ -331,9 +391,287 @@ export function RunExecutionDetails({
             )}
             {diagnostics.sources && <SourceFacts sources={diagnostics.sources} />}
           </TabPanel>
+          <TabPanel value="history" className="run-execution-details-panel">
+            <RunDiagnosticsHistoryPanel
+              workspaceId={scope.workspaceId}
+              taskId={scope.taskId}
+              active={tab === 'history'}
+              originalRunId={scope.runId}
+              onSelectRun={(entry) => {
+                setInspectedRun({
+                  originScopeKey: originalScopeKey,
+                  scope: {
+                    workspaceId: scope.workspaceId,
+                    taskId: entry.summary.taskId,
+                    runId: entry.summary.runId,
+                  },
+                });
+                setRequestedTool(undefined);
+                setTab('chain');
+              }}
+            />
+          </TabPanel>
         </div>
       </Tabs>
     </Modal>
+  );
+}
+
+function RunDiagnosticsHistoryPanel({
+  workspaceId,
+  taskId,
+  active,
+  originalRunId,
+  onSelectRun,
+}: {
+  workspaceId: string;
+  taskId?: string;
+  active: boolean;
+  originalRunId: string;
+  onSelectRun: (entry: RunDiagnosticsHistoryEntry) => void;
+}): React.JSX.Element {
+  const [draft, setDraft] = useState<HistoryFilterDraft>(() => historyFilterDraft(taskId));
+  const [filter, setFilter] = useState<RunDiagnosticsHistoryFilter>(() =>
+    taskId ? { taskId } : {},
+  );
+  const [rangeError, setRangeError] = useState('');
+  const history = useRunDiagnosticsHistory(workspaceId, filter, active);
+
+  const updateDraft = <Key extends keyof HistoryFilterDraft>(
+    key: Key,
+    value: HistoryFilterDraft[Key],
+  ): void => {
+    setDraft((current) => ({ ...current, [key]: value }));
+  };
+
+  const applyFilters = (event: React.FormEvent<HTMLFormElement>): void => {
+    event.preventDefault();
+    const fromCreatedAt = localDateBoundary(draft.fromDate, false);
+    const throughCreatedAt = localDateBoundary(draft.throughDate, true);
+    if (
+      (draft.fromDate && fromCreatedAt === undefined) ||
+      (draft.throughDate && throughCreatedAt === undefined)
+    ) {
+      setRangeError('日期无效，请重新选择。');
+      return;
+    }
+    if (
+      fromCreatedAt !== undefined &&
+      throughCreatedAt !== undefined &&
+      fromCreatedAt > throughCreatedAt
+    ) {
+      setRangeError('开始日期不能晚于截止日期。');
+      return;
+    }
+
+    setRangeError('');
+    setFilter({
+      ...(draft.taskScope === 'task' && taskId ? { taskId } : {}),
+      ...(fromCreatedAt !== undefined ? { fromCreatedAt } : {}),
+      ...(throughCreatedAt !== undefined ? { throughCreatedAt } : {}),
+      ...(draft.expertRevisionId.trim() ? { expertRevisionId: draft.expertRevisionId.trim() } : {}),
+      ...(draft.skillRevisionId.trim() ? { skillRevisionId: draft.skillRevisionId.trim() } : {}),
+      ...(draft.modelFingerprint.trim() ? { modelFingerprint: draft.modelFingerprint.trim() } : {}),
+    });
+  };
+
+  const clearFilters = (): void => {
+    setDraft(historyFilterDraft());
+    setFilter({});
+    setRangeError('');
+  };
+
+  const page = history.page;
+  const stats = page?.stats;
+  const hasFilters = Object.keys(filter).length > 0;
+
+  return (
+    <div className="run-diagnostics-history">
+      <SectionHeader variant="panel" title="执行记录与统计" />
+      <form className="run-diagnostics-history-filters" onSubmit={applyFilters}>
+        <Field label="任务范围" controlId="run-history-task-scope">
+          <FieldSelect
+            id="run-history-task-scope"
+            size="sm"
+            ariaLabel="任务范围"
+            value={draft.taskScope}
+            options={[
+              ...(taskId ? [{ id: 'task', label: '当前任务' }] : []),
+              { id: 'workspace', label: '整个工作空间' },
+            ]}
+            onChange={(value) => updateDraft('taskScope', value === 'task' ? 'task' : 'workspace')}
+          />
+        </Field>
+        <Field label="创建开始日期" controlId="run-history-from-date">
+          <TextField
+            id="run-history-from-date"
+            size="sm"
+            type="date"
+            value={draft.fromDate}
+            onChange={(event) => updateDraft('fromDate', event.currentTarget.value)}
+          />
+        </Field>
+        <Field label="创建截止日期" controlId="run-history-through-date">
+          <TextField
+            id="run-history-through-date"
+            size="sm"
+            type="date"
+            value={draft.throughDate}
+            onChange={(event) => updateDraft('throughDate', event.currentTarget.value)}
+          />
+        </Field>
+        <Field label="专家修订 ID" controlId="run-history-expert-revision">
+          <TextField
+            id="run-history-expert-revision"
+            size="sm"
+            value={draft.expertRevisionId}
+            onChange={(event) => updateDraft('expertRevisionId', event.currentTarget.value)}
+          />
+        </Field>
+        <Field label="技能修订 ID" controlId="run-history-skill-revision">
+          <TextField
+            id="run-history-skill-revision"
+            size="sm"
+            value={draft.skillRevisionId}
+            onChange={(event) => updateDraft('skillRevisionId', event.currentTarget.value)}
+          />
+        </Field>
+        <Field label="模型指纹" controlId="run-history-model-fingerprint">
+          <TextField
+            id="run-history-model-fingerprint"
+            size="sm"
+            value={draft.modelFingerprint}
+            onChange={(event) => updateDraft('modelFingerprint', event.currentTarget.value)}
+          />
+        </Field>
+        <div className="run-diagnostics-history-filter-actions">
+          <Button variant="primary" size="sm" type="submit">
+            应用筛选
+          </Button>
+          <Button variant="quiet" size="sm" type="button" onClick={clearFilters}>
+            清除条件
+          </Button>
+        </div>
+        {rangeError && <InlineError message={rangeError} />}
+      </form>
+      <p className="run-execution-node-fact">
+        日期范围按 Run 创建时间筛选，使用本机时区并包含首尾日期。修订与模型指纹匹配 Run
+        创建时固定值；历史未记录时不会代入当前配置。
+      </p>
+      {history.error && <InlineError message={history.error} onRetry={history.refresh} />}
+      {history.loading && <InlineLoading label="正在读取执行记录与统计…" />}
+      {stats && <HistoryStatistics stats={stats} />}
+      {!history.loading && !history.error && page && page.runs.length === 0 && (
+        <EmptyNotice
+          title={hasFilters ? '没有符合条件的执行记录' : '暂无执行记录'}
+          detail={
+            hasFilters ? '清除部分条件或扩大日期范围后重试。' : '此工作空间还没有可回看的 Run。'
+          }
+        />
+      )}
+      {page && page.runs.length > 0 && (
+        <>
+          <SectionHeader variant="panel" title={`执行记录 · ${page.stats.runCount} 个匹配 Run`} />
+          <ul className="run-execution-node-list">
+            {page.runs.map((entry) => (
+              <li key={entry.summary.runId}>
+                <ListRow
+                  variant="divider"
+                  multiline={true}
+                  title={`Run ${entry.summary.runId}`}
+                  detail={`${runStatusName[entry.summary.status]} · 模型调用 ${entry.summary.modelCallCount} 次 · 工具调用 ${entry.summary.toolCallCount} 次`}
+                  meta={`${new Date(entry.createdAt).toLocaleString()} · 模型版本 ${entry.modelFingerprint ?? '未记录'}`}
+                  onClick={() => onSelectRun(entry)}
+                  label={`查看 Run ${entry.summary.runId} 的执行详情`}
+                  selected={entry.summary.runId === originalRunId}
+                />
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      {page?.nextCursor && (
+        <Button
+          variant="quiet"
+          size="sm"
+          type="button"
+          disabled={history.loadingMore}
+          onClick={history.loadMore}
+        >
+          {history.loadingMore ? '正在读取…' : '加载更多'}
+        </Button>
+      )}
+    </div>
+  );
+}
+
+function HistoryStatistics({ stats }: { stats: RunDiagnosticsHistoryStats }): React.JSX.Element {
+  const failureRate =
+    stats.runFailure.rate === null
+      ? '未知（没有已完成或失败 Run）'
+      : `${stats.runFailure.failedRunCount}/${stats.runFailure.denominatorRunCount}（${(stats.runFailure.rate * 100).toFixed(1)}%）`;
+  const duration = stats.modelCallDurationMs;
+  return (
+    <section className="run-diagnostics-history-stats" aria-label="筛选范围统计">
+      <SectionHeader variant="panel" title={`${stats.runCount} 个匹配 Run 的统计`} />
+      <dl className="run-execution-facts">
+        <div>
+          <dt>Run 状态</dt>
+          <dd>
+            已完成 {stats.statusCounts.completed} · 失败 {stats.statusCounts.failed} · 已停止{' '}
+            {stats.statusCounts.cancelled} · 进行中 {stats.statusCounts.running}
+          </dd>
+        </div>
+        <div>
+          <dt>Run 失败率</dt>
+          <dd>
+            {failureRate}；分母 {stats.runFailure.denominatorRunCount}，排除已停止{' '}
+            {stats.runFailure.excludedCancelledRunCount}、进行中{' '}
+            {stats.runFailure.excludedRunningRunCount}
+          </dd>
+        </div>
+        <div>
+          <dt>模型与工具调用</dt>
+          <dd>
+            模型 {stats.modelCallCount} · 工具 {stats.toolCallCount} · 实际执行{' '}
+            {stats.toolExecutionCount} · 执行失败 {stats.failedToolExecutionCount} · 参数拒绝{' '}
+            {stats.rejectedToolCallCount}
+          </dd>
+        </div>
+        <div>
+          <dt>记录完整性</dt>
+          <dd>
+            完整 {stats.integrityCounts.complete} · 部分缺失 {stats.integrityCounts.partial} ·
+            不可用 {stats.integrityCounts.unavailable}
+          </dd>
+        </div>
+        <div>
+          <dt>输入 token</dt>
+          <dd>{aggregateMetricValue(stats.usage.promptTokens)}</dd>
+        </div>
+        <div>
+          <dt>输出 token</dt>
+          <dd>{aggregateMetricValue(stats.usage.completionTokens)}</dd>
+        </div>
+        <div>
+          <dt>总 token</dt>
+          <dd>{aggregateMetricValue(stats.usage.totalTokens)}</dd>
+        </div>
+        <div>
+          <dt>模型调用耗时</dt>
+          <dd>
+            p50 {durationValue(duration.p50)} · p95 {durationValue(duration.p95)} · 测量样本{' '}
+            {duration.sampleCount}；排除待开始 {duration.excludedCounts.pending}、进行中{' '}
+            {duration.excludedCounts.running}、中断 {duration.excludedCounts.interrupted}、未知{' '}
+            {duration.excludedCounts.unknown}、缺少测量 {duration.excludedCounts.missingMeasurement}
+          </dd>
+        </div>
+      </dl>
+      <p className="run-execution-node-fact">
+        统计覆盖全部匹配
+        Run，不受当前分页影响。耗时只使用已记录的模型调用单调时长；工具和宿主阶段不计入。
+      </p>
+    </section>
   );
 }
 

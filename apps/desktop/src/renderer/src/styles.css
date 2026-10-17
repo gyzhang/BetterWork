@@ -5154,6 +5154,29 @@ select,
 .run-execution-details {
   gap: var(--space-12);
 }
+.run-diagnostics-history {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-12);
+}
+.run-diagnostics-history-filters {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  align-items: end;
+  gap: var(--space-12);
+}
+.run-diagnostics-history-filter-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-8);
+}
+.run-diagnostics-history-stats {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-8);
+}
 .run-execution-details > .tabs {
   min-height: 0;
   flex: 1;
