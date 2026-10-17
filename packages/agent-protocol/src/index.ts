@@ -4941,6 +4941,158 @@ export type RunDiagnosticsPage = z.infer<typeof runDiagnosticsPageSchema>;
 export const runDiagnosticsPageResponseSchema = runDiagnosticsPageSchema.nullable();
 export const runDiagnosticsSummaryResponseSchema = runDiagnosticsSummarySchema.nullable();
 
+export const runDiagnosticsHistoryFilterSchema = z
+  .object({
+    taskId: z.string().min(1).max(512).optional(),
+    fromCreatedAt: z.number().int().nonnegative().optional(),
+    throughCreatedAt: z.number().int().nonnegative().optional(),
+    expertRevisionId: z.string().min(1).max(512).optional(),
+    skillRevisionId: z.string().min(1).max(512).optional(),
+    modelFingerprint: z.string().min(1).max(256).optional(),
+  })
+  .strict()
+  .superRefine((filter, context) => {
+    if (
+      filter.fromCreatedAt !== undefined &&
+      filter.throughCreatedAt !== undefined &&
+      filter.fromCreatedAt > filter.throughCreatedAt
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['fromCreatedAt'],
+        message: '起始创建时间不能晚于截止创建时间',
+      });
+    }
+  });
+export type RunDiagnosticsHistoryFilter = z.infer<typeof runDiagnosticsHistoryFilterSchema>;
+
+export const runDiagnosticsHistoryCursorSchema = z
+  .object({
+    workspaceId: z.string().min(1).max(512),
+    filter: runDiagnosticsHistoryFilterSchema,
+    afterCreatedAt: z.number().int().nonnegative(),
+    afterRunId: z.string().min(1).max(512),
+  })
+  .strict();
+export type RunDiagnosticsHistoryCursor = z.infer<typeof runDiagnosticsHistoryCursorSchema>;
+
+export const listRunDiagnosticsHistoryRequestSchema = z
+  .object({
+    workspaceId: z.string().min(1).max(512),
+    filter: runDiagnosticsHistoryFilterSchema.default({}),
+    pageSize: z
+      .number()
+      .int()
+      .min(1)
+      .max(RUN_DIAGNOSTICS_PAGE_SIZE_MAX)
+      .default(RUN_DIAGNOSTICS_PAGE_SIZE_DEFAULT),
+    cursor: runDiagnosticsHistoryCursorSchema.optional(),
+  })
+  .strict()
+  .superRefine((query, context) => {
+    if (!query.cursor) return;
+    if (query.cursor.workspaceId !== query.workspaceId) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['cursor', 'workspaceId'],
+        message: '执行记录游标必须属于当前 Workspace',
+      });
+    }
+    const filterFields = [
+      'taskId',
+      'fromCreatedAt',
+      'throughCreatedAt',
+      'expertRevisionId',
+      'skillRevisionId',
+      'modelFingerprint',
+    ] as const;
+    if (filterFields.some((field) => query.filter[field] !== query.cursor?.filter[field])) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['cursor', 'filter'],
+        message: '执行记录游标必须使用相同筛选条件',
+      });
+    }
+  });
+export type ListRunDiagnosticsHistoryRequest = z.input<
+  typeof listRunDiagnosticsHistoryRequestSchema
+>;
+
+export const runDiagnosticsHistoryEntrySchema = z
+  .object({
+    summary: runDiagnosticsSummarySchema,
+    createdAt: z.number().int().nonnegative(),
+    expertId: z.string().min(1).max(512).optional(),
+    expertRevisionId: z.string().min(1).max(512).optional(),
+    skillRevisionIds: z.array(z.string().min(1).max(512)).max(50),
+    modelFingerprint: z.string().min(1).max(256).optional(),
+  })
+  .strict();
+export type RunDiagnosticsHistoryEntry = z.infer<typeof runDiagnosticsHistoryEntrySchema>;
+
+export const runDiagnosticsHistoryStatsSchema = z
+  .object({
+    runCount: z.number().int().nonnegative(),
+    statusCounts: z
+      .object({
+        completed: z.number().int().nonnegative(),
+        failed: z.number().int().nonnegative(),
+        cancelled: z.number().int().nonnegative(),
+        running: z.number().int().nonnegative(),
+      })
+      .strict(),
+    runFailure: z
+      .object({
+        failedRunCount: z.number().int().nonnegative(),
+        denominatorRunCount: z.number().int().nonnegative(),
+        excludedCancelledRunCount: z.number().int().nonnegative(),
+        excludedRunningRunCount: z.number().int().nonnegative(),
+        rate: z.number().finite().min(0).max(1).nullable(),
+      })
+      .strict(),
+    integrityCounts: z
+      .object({
+        complete: z.number().int().nonnegative(),
+        partial: z.number().int().nonnegative(),
+        unavailable: z.number().int().nonnegative(),
+      })
+      .strict(),
+    modelCallCount: z.number().int().nonnegative(),
+    toolCallCount: z.number().int().nonnegative(),
+    toolExecutionCount: z.number().int().nonnegative(),
+    failedToolExecutionCount: z.number().int().nonnegative(),
+    rejectedToolCallCount: z.number().int().nonnegative(),
+    usage: runDiagnosticsUsageSchema,
+    modelCallDurationMs: z
+      .object({
+        sampleCount: z.number().int().nonnegative(),
+        p50: z.number().finite().nonnegative().optional(),
+        p95: z.number().finite().nonnegative().optional(),
+        excludedCounts: z
+          .object({
+            pending: z.number().int().nonnegative(),
+            running: z.number().int().nonnegative(),
+            interrupted: z.number().int().nonnegative(),
+            unknown: z.number().int().nonnegative(),
+            missingMeasurement: z.number().int().nonnegative(),
+          })
+          .strict(),
+      })
+      .strict(),
+  })
+  .strict();
+export type RunDiagnosticsHistoryStats = z.infer<typeof runDiagnosticsHistoryStatsSchema>;
+
+export const runDiagnosticsHistoryPageSchema = z
+  .object({
+    runs: z.array(runDiagnosticsHistoryEntrySchema).max(RUN_DIAGNOSTICS_PAGE_SIZE_MAX),
+    stats: runDiagnosticsHistoryStatsSchema,
+    nextCursor: runDiagnosticsHistoryCursorSchema.optional(),
+  })
+  .strict();
+export type RunDiagnosticsHistoryPage = z.infer<typeof runDiagnosticsHistoryPageSchema>;
+export const runDiagnosticsHistoryPageResponseSchema = runDiagnosticsHistoryPageSchema;
+
 export const runDiagnosticNodeDetailSchema = z
   .object({
     runId: z.string().min(1),
@@ -6666,6 +6818,7 @@ export const IpcChannel = {
   GetRunDiagnosticsSummary: 'run:diagnostics-summary',
   GetRunDiagnosticsSources: 'run:diagnostics-sources',
   ListRunDiagnosticsPage: 'run:diagnostics-page',
+  ListRunDiagnosticsHistory: 'run:diagnostics-history',
   GetRunDiagnosticNodeDetail: 'run:diagnostic-node-detail',
   GetDefaultWorkspace: 'workspace:get-default',
   /** 只弹目录选择器并返回路径：选目录不等于建空间，登记走 workspace:create。 */
@@ -6831,6 +6984,9 @@ export interface BetterWorkDesktopApi {
     getDiagnosticsSummary(input: RunDiagnosticsScopeRequest): Promise<RunDiagnosticsSummary | null>;
     getDiagnosticsSources(input: RunDiagnosticsScopeRequest): Promise<RunDiagnosticsSources | null>;
     listDiagnosticsPage(input: ListRunDiagnosticsPageRequest): Promise<RunDiagnosticsPage | null>;
+    listDiagnosticsHistory(
+      input: ListRunDiagnosticsHistoryRequest,
+    ): Promise<RunDiagnosticsHistoryPage>;
     getDiagnosticNodeDetail(
       input: GetRunDiagnosticNodeDetailRequest,
     ): Promise<RunDiagnosticNodeDetail | null>;

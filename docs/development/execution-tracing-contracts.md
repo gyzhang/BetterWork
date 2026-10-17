@@ -97,12 +97,12 @@ IPC channel 只在有实际 Main/Preload/Hook 消费者的卡中注册。Host �
 
 时间轴只展示已记录起止与正在运行的占位；单调 duration 与 wall-clock 区间含义分开。并列时间按来源与原序号稳定排序，不推断因果。主进程/子进程未同步时钟不支持精确关键路径推断；并发节点耗时不得直接相加当总时长。子进程内部未埋点阶段显示未记录。数据异常或零长度区间有明确降级，不生成负宽度；每个图形区间均有键盘可聚焦的文本替代。
 
-统计范围固定 Workspace，可选 Task、时间窗、精确 ExpertRevision、SkillRevision、模型快照指纹；缺少历史版本时归入“未记录”，不混入当前版本。分页与统计使用相同筛选条件，返回样本数和纳入/排除计数。
+统计范围固定 Workspace，可选 Task、创建时间窗、精确 ExpertRevision、SkillRevision、模型快照指纹。时间窗按 `runs.created_at` 闭区间筛选；修订与指纹只读 Run 固定快照、绑定和请求准备快照，不回退到当前配置。缺少历史版本时归入“未记录”，不混入当前版本。分页游标绑定 Workspace 和完整筛选条件；分页列表与统计使用相同筛选条件，统计覆盖全部匹配 Run，不受当前页影响，并返回样本数和纳入/排除计数。
 
 - Run 失败率只按最终 completed/failed 的已终态样本计算，取消与运行中单列；没有可用分母返回未知。
 - 工具失败/参数拒绝分别统计，不能与 Run 失败率混用；tool-only 模型也计入调用尝试。
 - 每种 token 分别给 knownSubtotal、knownCallCount、missingCallCount；0 是服务真实返回时的有效值。父节点不重复累计子节点。
-- duration 的 p50/p95 使用已终态且有有效测量的调用样本，采用 nearest-rank，并返回样本数；不含 unknown、中断后估计值与正在运行的计时。
+- duration 的 p50/p95 只使用模型调用节点上实际记录的单调 `durationMs`；已终态且有有效测量的样本采用 nearest-rank，并返回样本数。pending、running、interrupted、unknown 和缺测各自计入排除数，不混入宿主阶段或工具阶段时长。
 - 不自动计算货币费用，不以 fake 模型测量结果宣称真实模型性能。墙钟/内存预算断言只进现有 bench 档，不进功能测试。
 
 ## 8. 问题标记与本地诊断包

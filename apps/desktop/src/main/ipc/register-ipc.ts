@@ -109,6 +109,7 @@ import {
   listKnowledgeRevisionsRequestSchema,
   listMemoriesRequestSchema,
   listMemoryJobsRequestSchema,
+  listRunDiagnosticsHistoryRequestSchema,
   listRunDiagnosticsPageRequestSchema,
   listRunEventsRequestSchema,
   listRunsRequestSchema,
@@ -182,6 +183,7 @@ import {
   revokeSkillTrustRequestSchema,
   runArtifactSourceDeclarationSchema,
   runDiagnosticNodeDetailResponseSchema,
+  runDiagnosticsHistoryPageResponseSchema,
   runDiagnosticsPageResponseSchema,
   runDiagnosticsSourcesResponseSchema,
   runDiagnosticsSummaryResponseSchema,
@@ -661,6 +663,12 @@ function registerRunChannels({ store, runs, knowledgeVault }: IpcDependencies): 
         }) ?? null
       );
     },
+  );
+  handleInput(
+    IpcChannel.ListRunDiagnosticsHistory,
+    listRunDiagnosticsHistoryRequestSchema,
+    runDiagnosticsHistoryPageResponseSchema,
+    (input) => store.runDiagnostics.getHistoryPage(input),
   );
   handleInput(
     IpcChannel.GetRunDiagnosticNodeDetail,

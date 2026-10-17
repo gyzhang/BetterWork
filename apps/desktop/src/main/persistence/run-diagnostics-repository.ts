@@ -1,9 +1,14 @@
 import type {
   AgentRuntimeEvent,
   HostDiagnosticEvent,
+  ListRunDiagnosticsHistoryRequest,
   RunDiagnosticNode,
   RunDiagnosticNodeDetail,
   RunDiagnosticsCursor,
+  RunDiagnosticsHistoryEntry,
+  RunDiagnosticsHistoryFilter,
+  RunDiagnosticsHistoryPage,
+  RunDiagnosticsHistoryStats,
   RunDiagnosticsPage,
   RunDiagnosticsPageQuery,
   RunDiagnosticsRecording,
@@ -13,9 +18,11 @@ import type {
 import {
   agentRuntimeEventSchema,
   hostDiagnosticEventSchema,
+  listRunDiagnosticsHistoryRequestSchema,
   RUN_DIAGNOSTIC_DETAIL_MAX_UTF8_BYTES,
   runDiagnosticNodeDetailSchema,
   runDiagnosticNodeSchema,
+  runDiagnosticsHistoryPageSchema,
   runDiagnosticsPageQuerySchema,
   runDiagnosticsPageSchema,
   runDiagnosticsRecordingSchema,
@@ -32,6 +39,16 @@ interface RunDiagnosticsRow {
   completed_at: number | null;
   diagnostics_recording_version: number | null;
   diagnostics_sections_json: string | null;
+}
+
+interface RunDiagnosticsHistoryRow {
+  id: string;
+  task_id: string;
+  status: RunSummary['status'];
+  created_at: number;
+  expert_id: string | null;
+  expert_revision_id: string | null;
+  model_fingerprint: string | null;
 }
 
 interface StoredCoreEventRow {
@@ -351,6 +368,12 @@ const utf8Prefix = (value: string, maxBytes: number): { value: string; truncated
   return { value: prefix, truncated: true };
 };
 
+const nearestRank = (values: readonly number[], percentile: number): number | undefined => {
+  if (values.length === 0) return undefined;
+  const sorted = [...values].sort((left, right) => left - right);
+  return sorted[Math.ceil(percentile * sorted.length) - 1];
+};
+
 /** 从 Core Journal 构造只读执行链；不读取消息正文或 reasoning，也不写入第二份事件事实。 */
 export class RunDiagnosticsRepository {
   constructor(private readonly db: Database.Database) {}
@@ -396,6 +419,223 @@ export class RunDiagnosticsRepository {
       ...(nextCursor ? { nextCursor } : {}),
       integrity: snapshot.summary.integrity,
     });
+  }
+
+  getHistoryPage(input: ListRunDiagnosticsHistoryRequest): RunDiagnosticsHistoryPage {
+    const query = listRunDiagnosticsHistoryRequestSchema.parse(input);
+    const conditions = ['t.workspace_id = ?'];
+    const parameters: Array<string | number> = [query.workspaceId];
+    const filter: RunDiagnosticsHistoryFilter = query.filter;
+    if (filter.taskId !== undefined) {
+      conditions.push('r.task_id = ?');
+      parameters.push(filter.taskId);
+    }
+    if (filter.fromCreatedAt !== undefined) {
+      conditions.push('r.created_at >= ?');
+      parameters.push(filter.fromCreatedAt);
+    }
+    if (filter.throughCreatedAt !== undefined) {
+      conditions.push('r.created_at <= ?');
+      parameters.push(filter.throughCreatedAt);
+    }
+    if (filter.expertRevisionId !== undefined) {
+      conditions.push('s.expert_revision_id = ?');
+      parameters.push(filter.expertRevisionId);
+    }
+    if (filter.skillRevisionId !== undefined) {
+      conditions.push(
+        'EXISTS (SELECT 1 FROM run_skill_bindings b WHERE b.run_id = r.id AND b.skill_revision_id = ?)',
+      );
+      parameters.push(filter.skillRevisionId);
+    }
+    if (filter.modelFingerprint !== undefined) {
+      conditions.push(
+        `EXISTS (
+          SELECT 1 FROM run_memory_contexts m
+          WHERE m.run_id = r.id
+            AND CASE WHEN json_valid(m.model_snapshot_json)
+                THEN json_extract(m.model_snapshot_json, '$.fingerprint') END = ?
+        )`,
+      );
+      parameters.push(filter.modelFingerprint);
+    }
+    const rows = this.db
+      .prepare(
+        `SELECT r.id, r.task_id, r.status, r.created_at,
+                s.expert_id, s.expert_revision_id,
+                CASE WHEN json_valid(m.model_snapshot_json)
+                  THEN json_extract(m.model_snapshot_json, '$.fingerprint') END AS model_fingerprint
+         FROM runs r
+         JOIN tasks t ON t.id = r.task_id
+         LEFT JOIN run_context_snapshots s ON s.run_id = r.id
+         LEFT JOIN run_memory_contexts m ON m.run_id = r.id
+         WHERE ${conditions.join(' AND ')}
+         ORDER BY r.created_at DESC, r.id DESC`,
+      )
+      .all(...parameters) as RunDiagnosticsHistoryRow[];
+
+    const summaries = rows.flatMap((row) => {
+      const snapshot = this.snapshot(row.id);
+      return snapshot ? [{ row, ...snapshot }] : [];
+    });
+    const stats = this.summarizeHistory(
+      summaries.map(({ row, summary, nodes }) => ({
+        status: row.status,
+        summary,
+        nodes,
+      })),
+    );
+    const cursor = query.cursor;
+    const afterCursor = cursor
+      ? rows.filter(
+          (row) =>
+            row.created_at < cursor.afterCreatedAt ||
+            (row.created_at === cursor.afterCreatedAt && row.id < cursor.afterRunId),
+        )
+      : rows;
+    const pageRows = afterCursor.slice(0, query.pageSize);
+    const runs: RunDiagnosticsHistoryEntry[] = pageRows.flatMap((row) => {
+      const snapshot = summaries.find((item) => item.row.id === row.id);
+      if (!snapshot) return [];
+      const skillRevisionIds = (
+        this.db
+          .prepare(
+            `SELECT skill_revision_id FROM run_skill_bindings
+             WHERE run_id = ? ORDER BY created_at ASC, id ASC LIMIT 50`,
+          )
+          .all(row.id) as Array<{ skill_revision_id: string }>
+      ).map(({ skill_revision_id }) => skill_revision_id);
+      return [
+        {
+          summary: snapshot.summary,
+          createdAt: row.created_at,
+          ...(row.expert_id === null ? {} : { expertId: row.expert_id }),
+          ...(row.expert_revision_id === null ? {} : { expertRevisionId: row.expert_revision_id }),
+          skillRevisionIds,
+          ...(typeof row.model_fingerprint === 'string'
+            ? { modelFingerprint: row.model_fingerprint }
+            : {}),
+        },
+      ];
+    });
+    const last = pageRows.at(-1);
+    const nextCursor =
+      last && afterCursor.length > pageRows.length
+        ? {
+            workspaceId: query.workspaceId,
+            filter,
+            afterCreatedAt: last.created_at,
+            afterRunId: last.id,
+          }
+        : undefined;
+    return runDiagnosticsHistoryPageSchema.parse({
+      runs,
+      stats,
+      ...(nextCursor ? { nextCursor } : {}),
+    });
+  }
+
+  private summarizeHistory(
+    snapshots: readonly {
+      status: RunSummary['status'];
+      summary: RunDiagnosticsSummary;
+      nodes: readonly RunDiagnosticNode[];
+    }[],
+  ): RunDiagnosticsHistoryStats {
+    const statusCounts = { completed: 0, failed: 0, cancelled: 0, running: 0 };
+    const integrityCounts = { complete: 0, partial: 0, unavailable: 0 };
+    const usage = {
+      promptTokens: { knownSubtotal: 0n, knownCallCount: 0, missingCallCount: 0 },
+      completionTokens: { knownSubtotal: 0n, knownCallCount: 0, missingCallCount: 0 },
+      totalTokens: { knownSubtotal: 0n, knownCallCount: 0, missingCallCount: 0 },
+    };
+    const durations: number[] = [];
+    const excludedCounts = {
+      pending: 0,
+      running: 0,
+      interrupted: 0,
+      unknown: 0,
+      missingMeasurement: 0,
+    };
+    let failedToolExecutionCount = 0;
+    let modelCallCount = 0;
+    let toolCallCount = 0;
+    let toolExecutionCount = 0;
+    let rejectedToolCallCount = 0;
+    for (const { status, summary, nodes } of snapshots) {
+      statusCounts[status] += 1;
+      integrityCounts[summary.integrity] += 1;
+      modelCallCount += summary.modelCallCount;
+      toolCallCount += summary.toolCallCount;
+      toolExecutionCount += summary.toolExecutionCount;
+      failedToolExecutionCount += summary.failedToolExecutionCount;
+      rejectedToolCallCount += summary.rejectedToolCallCount;
+      for (const metric of ['promptTokens', 'completionTokens', 'totalTokens'] as const) {
+        usage[metric].knownSubtotal += BigInt(summary.usage[metric].knownSubtotal);
+        usage[metric].knownCallCount += summary.usage[metric].knownCallCount;
+        usage[metric].missingCallCount += summary.usage[metric].missingCallCount;
+      }
+      for (const node of nodes) {
+        if (node.kind !== 'model') continue;
+        if (node.status === 'pending') excludedCounts.pending += 1;
+        else if (node.status === 'running') excludedCounts.running += 1;
+        else if (node.status === 'interrupted') excludedCounts.interrupted += 1;
+        else if (node.status === 'unknown' || node.status === 'rejected') {
+          excludedCounts.unknown += 1;
+        } else if (
+          node.status === 'completed' ||
+          node.status === 'failed' ||
+          node.status === 'cancelled'
+        ) {
+          if (node.durationMs === undefined) excludedCounts.missingMeasurement += 1;
+          else durations.push(node.durationMs);
+        }
+      }
+    }
+    const denominatorRunCount = statusCounts.completed + statusCounts.failed;
+    const rate = denominatorRunCount === 0 ? null : statusCounts.failed / denominatorRunCount;
+    return {
+      runCount: snapshots.length,
+      statusCounts,
+      runFailure: {
+        failedRunCount: statusCounts.failed,
+        denominatorRunCount,
+        excludedCancelledRunCount: statusCounts.cancelled,
+        excludedRunningRunCount: statusCounts.running,
+        rate,
+      },
+      integrityCounts,
+      modelCallCount,
+      toolCallCount,
+      toolExecutionCount,
+      failedToolExecutionCount,
+      rejectedToolCallCount,
+      usage: {
+        promptTokens: {
+          knownSubtotal: usage.promptTokens.knownSubtotal.toString(),
+          knownCallCount: usage.promptTokens.knownCallCount,
+          missingCallCount: usage.promptTokens.missingCallCount,
+        },
+        completionTokens: {
+          knownSubtotal: usage.completionTokens.knownSubtotal.toString(),
+          knownCallCount: usage.completionTokens.knownCallCount,
+          missingCallCount: usage.completionTokens.missingCallCount,
+        },
+        totalTokens: {
+          knownSubtotal: usage.totalTokens.knownSubtotal.toString(),
+          knownCallCount: usage.totalTokens.knownCallCount,
+          missingCallCount: usage.totalTokens.missingCallCount,
+        },
+      },
+      modelCallDurationMs: {
+        sampleCount: durations.length,
+        ...(nearestRank(durations, 0.5) === undefined ? {} : { p50: nearestRank(durations, 0.5) }),
+        ...(nearestRank(durations, 0.95) === undefined
+          ? {}
+          : { p95: nearestRank(durations, 0.95) }),
+        excludedCounts,
+      },
+    };
   }
 
   getNodeDetail(runId: string, nodeId: string): RunDiagnosticNodeDetail | undefined {

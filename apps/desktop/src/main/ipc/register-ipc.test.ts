@@ -1332,6 +1332,29 @@ describe('registerIpc', () => {
       ],
     });
     await expect(
+      invoke(IpcChannel.ListRunDiagnosticsHistory, {
+        workspaceId: workspaceA.id,
+        filter: { fromCreatedAt: 10, throughCreatedAt: 10 },
+      }),
+    ).resolves.toMatchObject({
+      runs: [{ summary: { runId: runA, taskId: taskA.task.id } }],
+      stats: {
+        runCount: 1,
+        statusCounts: { running: 1 },
+        runFailure: {
+          denominatorRunCount: 0,
+          excludedRunningRunCount: 1,
+          rate: null,
+        },
+      },
+    });
+    await expect(
+      invoke(IpcChannel.ListRunDiagnosticsHistory, {
+        workspaceId: workspaceA.id,
+        filter: { taskId: taskB.task.id },
+      }),
+    ).resolves.toMatchObject({ runs: [], stats: { runCount: 0 } });
+    await expect(
       invoke(IpcChannel.GetRunDiagnosticNodeDetail, { ...scopeA, nodeId: 'tool:ipc-tool-a' }),
     ).resolves.toMatchObject({ runId: runA, nodeId: 'tool:ipc-tool-a', truncated: false });
     await expect(

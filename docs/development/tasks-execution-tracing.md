@@ -43,7 +43,7 @@
 | AT14 | 精确工作依据联查 | AT13 | M2 | done | 固定 Run 修订、材料实际读取、记忆/连续上下文与成果输入关系按精确 ID 联查；严格 DTO/同 Workspace IPC/Preload/Hook/详情来源页；配置变更和最新版本不漂移，搜索不算正文读取，跨范围引用拒绝，响应不含正文/路径/fileKey/locator/endpoint。Schema 与读取判定反例红→绿；定向 6 文件/486 项、typecheck 通过；最终 check:quick 退出 0（docs 156、functional 196/3174、动态消费者 2/281、heavy 6/215；差异覆盖 359/447=80.31%）；迁移仍 v49，真实 UI/模型未验，详见 2026-10-17 日志 |
 | AT15 | 双来源执行树与时间轴 | AT14 | M2 | done | Core/Host 保留各自原序号，按显式关联建树、稳定复合游标分页并合并最小诊断失效推送；运行详情提供键盘可读时间轴与文本替代。修复 ContextPanel 假 API 缺失订阅方法；8 个定向文件/530 项、ContextPanel 33 项通过；最终 check:quick 退出 0（functional 198/3341、动态消费者 2/281、heavy 6/215；差异覆盖 537/631=85.10%）；无新迁移，仍 v49；真实 UI/模型未验，详见 2026-10-17 日志 |
 | AT16 | 观测故障、中断与恢复回归 | AT15 | M2 | done | 补测验证 Recorder 写入失败不改变成功/取消终态、业务 Journal 拒绝事件不派发且失败只收口一次；临时文件 SQLite 重开后启动恢复仅追加一个根失败终态，未闭合 Host 节点为 interrupted 且无结束时间/耗时，不触发 Provider 重跑。定向 lifecycle 35 项、RunService AT10 恢复 1 项及完整 check:quick 通过（functional 198/3342、动态消费者 2/281、heavy 6/215；差异覆盖 537/631=85.10%）；无新迁移，仍 v49；未强杀进程/操作用户库/验真实 UI 或模型，详见 2026-10-17 日志 |
-| AT17 | 统计筛选与确定性聚合 | AT16 | M3 | todo | 未开工 |
+| AT17 | 统计筛选与确定性聚合 | AT16 | M3 | done | 闭区间 `runs.created_at` 与精确 Run 快照筛选；游标绑定 Workspace/筛选，聚合跨全部匹配 Run。失败分母仅 completed+failed，token 保留 0/未知，工具执行失败/拒绝分开，模型调用单调耗时 nearest-rank。定向 4 文件/474 项通过；check:quick 退出 0（docs 156、functional 198/3345、动态消费者 2/282、heavy 6/215；覆盖 634/729=86.97%）；无新迁移，v49，详见 2026-10-17 日志 |
 | AT18 | 执行记录筛选与统计呈现 | AT17 | M3 | todo | 未开工 |
 | AT19 | 用户问题标记 | AT18 | M3 | todo | 未开工 |
 | AT20 | 本地脱敏 JSON 诊断包 | AT19 | M3 | todo | 未开工；不连接远端 |
@@ -207,6 +207,7 @@
 - 范围：Workspace 内按 Task、时间窗、精确专家/技能修订、模型指纹过滤；同一筛选返回列表和统计；有实际消费者地增加 DTO/IPC/Preload 查询。
 - 反例/验收：取消/运行中不混失败分母、局部失败后 Run 成功、0 与未知用量、tool-only、父子用量去重、nearest-rank p50/p95、空样本/缺版本、跨范围游标；结果能追到 Run。
 - 验证/停点：固定数值合成样本独立计算期望值、查询/IPC 测试及快检；不建后台采样器/价格表/预聚合真相库。
+- 实施口径：创建时间窗按 `runs.created_at` 闭区间；仅查 Run 固定的 Expert/Skill 修订与请求准备时模型指纹，游标绑定 Workspace 和完整筛选；统计跨全部匹配样本。耗时只聚合模型节点实际记录的单调 `durationMs`，pending/running/interrupted/unknown/缺测分别列出排除数。
 
 ### AT18：执行记录筛选与统计呈现
 

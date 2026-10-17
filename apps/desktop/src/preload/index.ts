@@ -120,6 +120,7 @@ import {
   listKnowledgeRevisionsRequestSchema,
   listMemoriesRequestSchema,
   listMemoryJobsRequestSchema,
+  listRunDiagnosticsHistoryRequestSchema,
   listRunDiagnosticsPageRequestSchema,
   listRunEventsRequestSchema,
   listRunsRequestSchema,
@@ -195,6 +196,7 @@ import {
   runArtifactSourceDeclarationSchema,
   runDiagnosticNodeDetailResponseSchema,
   runDiagnosticsChangedEventSchema,
+  runDiagnosticsHistoryPageResponseSchema,
   runDiagnosticsPageResponseSchema,
   runDiagnosticsSourcesResponseSchema,
   runDiagnosticsSummaryResponseSchema,
@@ -383,6 +385,11 @@ const runInvokeContracts = defineInvokeContracts({
     request: listRunDiagnosticsPageRequestSchema,
     response: runDiagnosticsPageResponseSchema,
   },
+  [IpcChannel.ListRunDiagnosticsHistory]: {
+    channel: IpcChannel.ListRunDiagnosticsHistory,
+    request: listRunDiagnosticsHistoryRequestSchema,
+    response: runDiagnosticsHistoryPageResponseSchema,
+  },
   [IpcChannel.GetRunDiagnosticNodeDetail]: {
     channel: IpcChannel.GetRunDiagnosticNodeDetail,
     request: getRunDiagnosticNodeDetailRequestSchema,
@@ -486,6 +493,8 @@ const runInvokeMethods: InvokeMethodsByChannel<typeof runInvokeContracts> = {
     invokeContract(runInvokeContracts[IpcChannel.GetRunDiagnosticsSources], input),
   [IpcChannel.ListRunDiagnosticsPage]: (input) =>
     invokeContract(runInvokeContracts[IpcChannel.ListRunDiagnosticsPage], input),
+  [IpcChannel.ListRunDiagnosticsHistory]: (input) =>
+    invokeContract(runInvokeContracts[IpcChannel.ListRunDiagnosticsHistory], input),
   [IpcChannel.GetRunDiagnosticNodeDetail]: (input) =>
     invokeContract(runInvokeContracts[IpcChannel.GetRunDiagnosticNodeDetail], input),
   [IpcChannel.GetRunSettings]: (input) =>
@@ -1759,6 +1768,8 @@ const api: BetterWorkDesktopApi = {
     getDiagnosticsSummary: (input) => runInvokeMethods[IpcChannel.GetRunDiagnosticsSummary](input),
     getDiagnosticsSources: (input) => runInvokeMethods[IpcChannel.GetRunDiagnosticsSources](input),
     listDiagnosticsPage: (input) => runInvokeMethods[IpcChannel.ListRunDiagnosticsPage](input),
+    listDiagnosticsHistory: (input) =>
+      runInvokeMethods[IpcChannel.ListRunDiagnosticsHistory](input),
     getDiagnosticNodeDetail: (input) =>
       runInvokeMethods[IpcChannel.GetRunDiagnosticNodeDetail](input),
     onEvent: (listener) => runEventMethods[IpcChannel.RunEvent](listener),

@@ -19,6 +19,7 @@ import {
   jobResultSchema,
   jobSpecSchema,
   listPageSchema,
+  listRunDiagnosticsHistoryRequestSchema,
   listScheduleOccurrencesRequestSchema,
   listScheduleSourceItemsRequestSchema,
   listSchedulesRequestSchema,
@@ -60,6 +61,7 @@ import {
   runDiagnosticNodeSchema,
   runDiagnosticsChangedEventSchema,
   runDiagnosticsCursorSchema,
+  runDiagnosticsHistoryPageSchema,
   runDiagnosticsSourcesSchema,
   runMaterialReadSchema,
   runMemoryContextSchema,
@@ -2690,5 +2692,77 @@ describe('dual-source run diagnostics protocol', () => {
         event: { stdout: 'must not be broadcast' },
       }).success,
     ).toBe(false);
+  });
+});
+
+describe('diagnostics history protocol', () => {
+  it('binds diagnostics history cursors to workspace and exact filters', () => {
+    const request = {
+      workspaceId: 'workspace-1',
+      filter: { taskId: 'task-1', fromCreatedAt: 10, throughCreatedAt: 20 },
+      pageSize: 10,
+      cursor: {
+        workspaceId: 'workspace-1',
+        filter: { taskId: 'task-1', fromCreatedAt: 10, throughCreatedAt: 20 },
+        afterCreatedAt: 15,
+        afterRunId: 'run-2',
+      },
+    };
+    expect(listRunDiagnosticsHistoryRequestSchema.safeParse(request).success).toBe(true);
+    expect(
+      listRunDiagnosticsHistoryRequestSchema.safeParse({
+        ...request,
+        filter: { ...request.filter, taskId: 'task-2' },
+      }).success,
+    ).toBe(false);
+    expect(
+      listRunDiagnosticsHistoryRequestSchema.safeParse({
+        ...request,
+        cursor: { ...request.cursor, workspaceId: 'workspace-2' },
+      }).success,
+    ).toBe(false);
+    expect(
+      listRunDiagnosticsHistoryRequestSchema.safeParse({
+        workspaceId: 'workspace-1',
+        filter: { fromCreatedAt: 21, throughCreatedAt: 20 },
+      }).success,
+    ).toBe(false);
+    expect(
+      runDiagnosticsHistoryPageSchema.safeParse({
+        runs: [],
+        stats: {
+          runCount: 0,
+          statusCounts: { completed: 0, failed: 0, cancelled: 0, running: 0 },
+          runFailure: {
+            failedRunCount: 0,
+            denominatorRunCount: 0,
+            excludedCancelledRunCount: 0,
+            excludedRunningRunCount: 0,
+            rate: null,
+          },
+          integrityCounts: { complete: 0, partial: 0, unavailable: 0 },
+          modelCallCount: 0,
+          toolCallCount: 0,
+          toolExecutionCount: 0,
+          failedToolExecutionCount: 0,
+          rejectedToolCallCount: 0,
+          usage: {
+            promptTokens: { knownSubtotal: '0', knownCallCount: 0, missingCallCount: 0 },
+            completionTokens: { knownSubtotal: '0', knownCallCount: 0, missingCallCount: 0 },
+            totalTokens: { knownSubtotal: '0', knownCallCount: 0, missingCallCount: 0 },
+          },
+          modelCallDurationMs: {
+            sampleCount: 0,
+            excludedCounts: {
+              pending: 0,
+              running: 0,
+              interrupted: 0,
+              unknown: 0,
+              missingMeasurement: 0,
+            },
+          },
+        },
+      }).success,
+    ).toBe(true);
   });
 });
