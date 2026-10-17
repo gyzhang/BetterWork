@@ -45,7 +45,7 @@
 | AT16 | 观测故障、中断与恢复回归 | AT15 | M2 | done | 补测验证 Recorder 写入失败不改变成功/取消终态、业务 Journal 拒绝事件不派发且失败只收口一次；临时文件 SQLite 重开后启动恢复仅追加一个根失败终态，未闭合 Host 节点为 interrupted 且无结束时间/耗时，不触发 Provider 重跑。定向 lifecycle 35 项、RunService AT10 恢复 1 项及完整 check:quick 通过（functional 198/3342、动态消费者 2/281、heavy 6/215；差异覆盖 537/631=85.10%）；无新迁移，仍 v49；未强杀进程/操作用户库/验真实 UI 或模型，详见 2026-10-17 日志 |
 | AT17 | 统计筛选与确定性聚合 | AT16 | M3 | done | 闭区间 `runs.created_at` 与精确 Run 快照筛选；游标绑定 Workspace/筛选，聚合跨全部匹配 Run。失败分母仅 completed+failed，token 保留 0/未知，工具执行失败/拒绝分开，模型调用单调耗时 nearest-rank。定向 4 文件/474 项通过；check:quick 退出 0（docs 156、functional 198/3345、动态消费者 2/282、heavy 6/215；覆盖 634/729=86.97%）；无新迁移，v49，详见 2026-10-17 日志 |
 | AT18 | 执行记录筛选与统计呈现 | AT17 | M3 | done | 详情内接入任务/Workspace、日期、固定修订与模型指纹筛选；统计覆盖全部匹配 Run、显示失败分母、完整性、token 已知/未知调用、耗时样本与排除数；迟到筛选响应丢弃，可分页并返回具体 Run。定向 React 15 项通过；关闭请求世代校验的变异测试红 1、恢复后绿；check:quick 退出 0（docs 156、functional 2 文件/48 项、heavy App 56 项；差异覆盖 102/114=89.47%）；无迁移，v49，真实 UI 留 AT23，详见 2026-10-17 日志 |
-| AT19 | 用户问题标记 | AT18 | M3 | todo | 未开工 |
+| AT19 | 用户问题标记 | AT18 | M3 | done | v50 追加每 Run 单标记表，CAS revision 防并发覆盖并随 Run 级联删除；Main 验证 Workspace/Task/Run 归属，节点必须属于该 Run。协议/IPC/Preload/Hook/执行链分类与节点选择已接通；保存失败保留草稿，成功/清除各只有一枚局部 TransientToast。跨层定向 6 文件/560 项通过；check:quick 退出 0（docs 156、functional 197/3195、动态消费者 2/285、heavy 6/215；覆盖 119/124=95.97%）。修复协议测试既有嵌套用例收集错误；不含自由文本/Memory，真实 Electron UI 留 AT23，详见 2026-10-17 日志 |
 | AT20 | 本地脱敏 JSON 诊断包 | AT19 | M3 | todo | 未开工；不连接远端 |
 | AT21 | 固定合成样本与版本比较 | AT20 | M4 | todo | 未开工；不新增付费重跑产品 |
 | AT22 | 离线总收口与人工验收清单 | AT21 | M4 | todo | 未开工 |

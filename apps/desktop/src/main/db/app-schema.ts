@@ -2360,6 +2360,25 @@ export const appMigrations: readonly Migration[] = [
       `);
     },
   },
+  {
+    version: 50,
+    name: 'add per-Run diagnostic issue marks',
+    up(db: Database.Database): void {
+      db.exec(`
+        CREATE TABLE run_diagnostic_issue_marks (
+          run_id TEXT PRIMARY KEY REFERENCES runs(id) ON DELETE CASCADE,
+          category TEXT NOT NULL CHECK (category IN (
+            'model', 'tool', 'material', 'artifact', 'lifecycle', 'other'
+          )),
+          diagnostic_node_id TEXT CHECK (
+            diagnostic_node_id IS NULL OR length(diagnostic_node_id) BETWEEN 1 AND 512
+          ),
+          revision INTEGER NOT NULL CHECK (revision > 0),
+          updated_at INTEGER NOT NULL CHECK (updated_at >= 0)
+        );
+      `);
+    },
+  },
 ];
 
 /**

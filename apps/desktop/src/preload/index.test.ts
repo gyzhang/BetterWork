@@ -282,7 +282,7 @@ describe('run preload API', () => {
     expect(mocks.invoke).toHaveBeenCalledTimes(4);
   });
 
-  it('validates scoped diagnostic requests and responses through the three Run channels', async () => {
+  it('validates scoped diagnostic requests and responses through the Run channels', async () => {
     const historyPage = {
       runs: [],
       stats: {
@@ -327,6 +327,12 @@ describe('run preload API', () => {
       api().runs.getDiagnosticsSources(scope),
       api().runs.listDiagnosticsPage(scope),
       api().runs.listDiagnosticsHistory({ workspaceId: 'workspace-1' }),
+      api().runs.getDiagnosticIssueMark(scope),
+      api().runs.setDiagnosticIssueMark({
+        ...scope,
+        expectedRevision: null,
+        category: 'model',
+      }),
       api().runs.getDiagnosticNodeDetail({ ...scope, nodeId: 'tool:tool-1' }),
     ]);
     expect(mocks.invoke.mock.calls).toEqual([
@@ -336,6 +342,11 @@ describe('run preload API', () => {
       [
         IpcChannel.ListRunDiagnosticsHistory,
         { workspaceId: 'workspace-1', filter: {}, pageSize: 50 },
+      ],
+      [IpcChannel.GetRunDiagnosticIssueMark, scope],
+      [
+        IpcChannel.SetRunDiagnosticIssueMark,
+        { ...scope, expectedRevision: null, category: 'model' },
       ],
       [IpcChannel.GetRunDiagnosticNodeDetail, { ...scope, nodeId: 'tool:tool-1' }],
     ]);

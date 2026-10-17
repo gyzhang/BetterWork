@@ -58,6 +58,7 @@ import {
   resolveMemoryConflictRequestSchema,
   resultSchema,
   retryScheduleOutputRequestSchema,
+  runDiagnosticIssueMarkSchema,
   runDiagnosticNodeSchema,
   runDiagnosticsChangedEventSchema,
   runDiagnosticsCursorSchema,
@@ -94,6 +95,7 @@ import {
   scheduleTimingSchema,
   scriptExecutionSchema,
   setDefaultModelRequestSchema,
+  setRunDiagnosticIssueMarkRequestSchema,
   setScheduleLifecycleRequestSchema,
   setSkillTrustRequestSchema,
   skillBindingSchema,
@@ -2514,110 +2516,110 @@ it('validates strict host diagnostic event variants and rejects unbounded data',
       phase: 'dispatch',
     }).success,
   ).toBe(true);
+});
 
-  it('accepts exact diagnostic source references without allowing source bodies or paths', () => {
-    const sources = {
-      runId: 'run-1',
-      integrity: 'complete',
-      fixedContext: {
+it('accepts exact diagnostic source references without allowing source bodies or paths', () => {
+  const sources = {
+    runId: 'run-1',
+    integrity: 'complete',
+    fixedContext: {
+      state: 'recorded',
+      taskContextRevisionId: 'context-revision-1',
+      expert: {
         state: 'recorded',
-        taskContextRevisionId: 'context-revision-1',
-        expert: {
-          state: 'recorded',
-          expertId: 'expert-1',
-          revisionId: 'expert-revision-1',
-          revision: 2,
-          name: 'Historical expert',
-        },
-        model: {
-          reference: { mode: 'profile', modelProfileId: 'model-profile-1' },
-          snapshot: {
-            displayName: 'Model snapshot',
-            fingerprint: 'a'.repeat(64),
-            modelProfileId: 'model-profile-1',
-          },
-          memoryPhase: 'dispatch-attempted',
-          dispatchAttemptedAt: 15,
-        },
-        skills: [],
+        expertId: 'expert-1',
+        revisionId: 'expert-revision-1',
+        revision: 2,
+        name: 'Historical expert',
       },
+      model: {
+        reference: { mode: 'profile', modelProfileId: 'model-profile-1' },
+        snapshot: {
+          displayName: 'Model snapshot',
+          fingerprint: 'a'.repeat(64),
+          modelProfileId: 'model-profile-1',
+        },
+        memoryPhase: 'dispatch-attempted',
+        dispatchAttemptedAt: 15,
+      },
+      skills: [],
+    },
+    materials: {
+      state: 'recorded',
+      selected: [
+        {
+          reference: {
+            kind: 'knowledge-revision',
+            documentId: 'document-1',
+            revisionId: 'knowledge-revision-1',
+            contentHash: 'b'.repeat(64),
+            title: 'Historical policy',
+            state: 'recorded',
+          },
+          purpose: 'rule',
+          addedFrom: 'user-input',
+          wasRead: false,
+        },
+      ],
+      reads: [],
+    },
+    memory: {
+      state: 'recorded',
+      recallVersion: 'memory-recall-v2',
+      phase: 'dispatch-attempted',
+      selectedItems: [
+        {
+          memoryId: 'memory-1',
+          revisionId: 'memory-revision-1',
+          contentHash: 'c'.repeat(64),
+          order: 1,
+          reason: 'pinned-rule',
+          score: 0,
+        },
+      ],
+      reads: [],
+      replay: [],
+    },
+    continuity: {
+      state: 'recorded',
+      revisionId: 'continuity-revision-1',
+      briefHash: 'd'.repeat(64),
+      preparedAt: 12,
+      firstProviderRequestAt: 15,
+      omissions: [],
+      sourceRunIds: ['prior-run-1'],
+      artifactVersionIds: [],
+    },
+    artifacts: { state: 'recorded', producedVersions: [], inputRelations: [] },
+  } as const;
+
+  expect(runDiagnosticsSourcesSchema.safeParse(sources).success).toBe(true);
+  expect(
+    runDiagnosticsSourcesSchema.safeParse({
+      ...sources,
       materials: {
-        state: 'recorded',
+        ...sources.materials,
         selected: [
           {
+            ...sources.materials.selected[0],
             reference: {
-              kind: 'knowledge-revision',
-              documentId: 'document-1',
-              revisionId: 'knowledge-revision-1',
-              contentHash: 'b'.repeat(64),
-              title: 'Historical policy',
-              state: 'recorded',
+              ...sources.materials.selected[0].reference,
+              sourcePath: '/private/source.md',
             },
-            purpose: 'rule',
-            addedFrom: 'user-input',
-            wasRead: false,
           },
         ],
-        reads: [],
       },
+    }).success,
+  ).toBe(false);
+  expect(
+    runDiagnosticsSourcesSchema.safeParse({
+      ...sources,
       memory: {
-        state: 'recorded',
-        recallVersion: 'memory-recall-v2',
-        phase: 'dispatch-attempted',
-        selectedItems: [
-          {
-            memoryId: 'memory-1',
-            revisionId: 'memory-revision-1',
-            contentHash: 'c'.repeat(64),
-            order: 1,
-            reason: 'pinned-rule',
-            score: 0,
-          },
-        ],
-        reads: [],
-        replay: [],
+        ...sources.memory,
+        selectedItems: [{ ...sources.memory.selectedItems[0], content: 'private memory body' }],
       },
-      continuity: {
-        state: 'recorded',
-        revisionId: 'continuity-revision-1',
-        briefHash: 'd'.repeat(64),
-        preparedAt: 12,
-        firstProviderRequestAt: 15,
-        omissions: [],
-        sourceRunIds: ['prior-run-1'],
-        artifactVersionIds: [],
-      },
-      artifacts: { state: 'recorded', producedVersions: [], inputRelations: [] },
-    } as const;
-
-    expect(runDiagnosticsSourcesSchema.safeParse(sources).success).toBe(true);
-    expect(
-      runDiagnosticsSourcesSchema.safeParse({
-        ...sources,
-        materials: {
-          ...sources.materials,
-          selected: [
-            {
-              ...sources.materials.selected[0],
-              reference: {
-                ...sources.materials.selected[0].reference,
-                sourcePath: '/private/source.md',
-              },
-            },
-          ],
-        },
-      }).success,
-    ).toBe(false);
-    expect(
-      runDiagnosticsSourcesSchema.safeParse({
-        ...sources,
-        memory: {
-          ...sources.memory,
-          selectedItems: [{ ...sources.memory.selectedItems[0], content: 'private memory body' }],
-        },
-      }).success,
-    ).toBe(false);
-  });
+    }).success,
+  ).toBe(false);
 });
 
 it('validates strict host diagnostic event variants and rejects unbounded data', () => {
@@ -2762,6 +2764,37 @@ describe('diagnostics history protocol', () => {
             },
           },
         },
+      }).success,
+    ).toBe(true);
+  });
+});
+
+describe('diagnostic issue mark protocol', () => {
+  it('keeps categories bounded and only accepts a node reference for a saved mark', () => {
+    const scope = { workspaceId: 'workspace-1', taskId: 'task-1', runId: 'run-1' };
+    const request = {
+      ...scope,
+      expectedRevision: null,
+      category: 'tool',
+      diagnosticNodeId: 'tool:call-1',
+    };
+    expect(setRunDiagnosticIssueMarkRequestSchema.safeParse(request).success).toBe(true);
+    expect(
+      setRunDiagnosticIssueMarkRequestSchema.safeParse({ ...request, category: 'memory' }).success,
+    ).toBe(false);
+    expect(
+      setRunDiagnosticIssueMarkRequestSchema.safeParse({
+        ...request,
+        category: null,
+      }).success,
+    ).toBe(false);
+    expect(
+      runDiagnosticIssueMarkSchema.safeParse({
+        runId: scope.runId,
+        category: 'tool',
+        diagnosticNodeId: 'tool:call-1',
+        revision: 1,
+        updatedAt: 100,
       }).success,
     ).toBe(true);
   });

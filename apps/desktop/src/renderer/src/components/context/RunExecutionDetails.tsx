@@ -1,4 +1,5 @@
 import type {
+  RunDiagnosticIssueMarkCategory,
   RunDiagnosticNode,
   RunDiagnosticsHistoryEntry,
   RunDiagnosticsHistoryFilter,
@@ -8,8 +9,9 @@ import type {
   RunDiagnosticsSources,
   RunDiagnosticsSummary,
 } from '@betterwork/agent-protocol';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
+import { useRunDiagnosticIssueMark } from '../../hooks/use-run-diagnostic-issue-mark';
 import { useRunDiagnosticNodeDetail } from '../../hooks/use-run-diagnostic-node-detail';
 import { useRunDiagnostics } from '../../hooks/use-run-diagnostics';
 import { useRunDiagnosticsHistory } from '../../hooks/use-run-diagnostics-history';
@@ -19,6 +21,7 @@ import {
   mergeRunDiagnosticNodes,
   type RunDiagnosticTreeNode,
 } from '../../lib/run-diagnostics';
+import { ActionBar } from '../ActionBar';
 import { AsyncButton, InlineLoading } from '../AsyncButton';
 import { Badge, type BadgeTone } from '../Badge';
 import { Button } from '../Button';
@@ -33,6 +36,7 @@ import { SectionHeader } from '../SectionHeader';
 import { StatusNote } from '../StatusNote';
 import { Tab, TabList, TabPanel, Tabs } from '../Tabs';
 import { TextField } from '../TextField';
+import { TransientToast } from '../TransientToast';
 
 type DetailsTab = 'chain' | 'timeline' | 'usage' | 'sources' | 'history';
 type HistoryTaskScope = 'task' | 'workspace';
@@ -313,6 +317,11 @@ export function RunExecutionDetails({
                 ))}
               </ul>
             )}
+            <RunDiagnosticIssueMarkPanel
+              key={activeScope.runId}
+              scope={activeScope}
+              nodes={diagnostics.nodes}
+            />
           </TabPanel>
           <TabPanel value="timeline" className="run-execution-details-panel">
             {diagnostics.error && (
@@ -414,6 +423,133 @@ export function RunExecutionDetails({
         </div>
       </Tabs>
     </Modal>
+  );
+}
+
+const issueCategoryOptions: { id: RunDiagnosticIssueMarkCategory; label: string }[] = [
+  { id: 'model', label: '模型' },
+  { id: 'tool', label: '工具' },
+  { id: 'material', label: '材料' },
+  { id: 'artifact', label: '成果' },
+  { id: 'lifecycle', label: '运行生命周期' },
+  { id: 'other', label: '其他' },
+];
+
+const isIssueCategory = (value: string): value is RunDiagnosticIssueMarkCategory =>
+  issueCategoryOptions.some((option) => option.id === value);
+
+function RunDiagnosticIssueMarkPanel({
+  scope,
+  nodes,
+}: {
+  scope: RunDiagnosticsScopeRequest;
+  nodes: readonly RunDiagnosticNode[];
+}): React.JSX.Element {
+  const issueMark = useRunDiagnosticIssueMark(scope, true);
+  const [category, setCategory] = useState<RunDiagnosticIssueMarkCategory>('other');
+  const [diagnosticNodeId, setDiagnosticNodeId] = useState('');
+  const initializedDraft = useRef(false);
+
+  useEffect(() => {
+    if (!issueMark.loaded || initializedDraft.current) return;
+    initializedDraft.current = true;
+    if (issueMark.mark) {
+      setCategory(issueMark.mark.category);
+      setDiagnosticNodeId(issueMark.mark.diagnosticNodeId ?? '');
+    }
+  }, [issueMark.loaded, issueMark.mark]);
+
+  const nodeOptions = nodes.reduce<{
+    modelCallCount: number;
+    options: { id: string; label: string }[];
+  }>(
+    (result, node) => {
+      const modelCallCount =
+        node.kind === 'model' ? result.modelCallCount + 1 : result.modelCallCount;
+      return {
+        modelCallCount,
+        options: [
+          ...result.options,
+          {
+            id: node.id,
+            label: `${nodeTitle(node, node.kind === 'model' ? modelCallCount : 0)} · ${node.id}`,
+          },
+        ],
+      };
+    },
+    { modelCallCount: 0, options: [] },
+  ).options;
+  const selectedNodeUnavailable =
+    diagnosticNodeId !== '' && !nodeOptions.some((option) => option.id === diagnosticNodeId);
+
+  return (
+    <section className="run-diagnostic-issue-mark">
+      <SectionHeader variant="panel" title="问题标记" />
+      <p className="run-diagnostic-issue-mark-description">
+        记录这次 Run 的问题类别，可选关联同一 Run 的过程节点。
+      </p>
+      {issueMark.loading && <InlineLoading label="正在读取问题标记…" />}
+      {issueMark.error && <InlineError message={issueMark.error} onRetry={issueMark.refresh} />}
+      <div className="run-diagnostic-issue-mark-fields">
+        <Field label="问题类别" controlId="run-diagnostic-issue-category">
+          <FieldSelect
+            id="run-diagnostic-issue-category"
+            size="sm"
+            value={category}
+            options={issueCategoryOptions}
+            disabled={!issueMark.loaded || issueMark.loading || issueMark.saving}
+            onChange={(value) => {
+              if (isIssueCategory(value)) setCategory(value);
+            }}
+          />
+        </Field>
+        <Field label="关联过程节点（可选）" controlId="run-diagnostic-issue-node">
+          <FieldSelect
+            id="run-diagnostic-issue-node"
+            size="sm"
+            value={diagnosticNodeId}
+            options={[
+              { id: '', label: '不关联节点' },
+              ...(selectedNodeUnavailable
+                ? [
+                    {
+                      id: diagnosticNodeId,
+                      label: `已关联节点未载入 · ${diagnosticNodeId}`,
+                      disabled: true,
+                    },
+                  ]
+                : []),
+              ...nodeOptions,
+            ]}
+            disabled={!issueMark.loaded || issueMark.loading || issueMark.saving}
+            onChange={setDiagnosticNodeId}
+          />
+        </Field>
+      </div>
+      <ActionBar as="div" label="保存问题标记">
+        <Button
+          variant="secondary"
+          size="sm"
+          type="button"
+          disabled={!issueMark.mark || !issueMark.loaded || issueMark.saving}
+          onClick={issueMark.clear}
+        >
+          清除标记
+        </Button>
+        <Button
+          variant="primary"
+          size="sm"
+          type="button"
+          disabled={!issueMark.loaded || issueMark.loading || issueMark.saving}
+          onClick={() => issueMark.save(category, diagnosticNodeId || undefined)}
+        >
+          {issueMark.saving ? '正在保存…' : '保存标记'}
+        </Button>
+      </ActionBar>
+      {issueMark.toast && (
+        <TransientToast {...issueMark.toast} onDismiss={issueMark.dismissToast} />
+      )}
+    </section>
   );
 }
 

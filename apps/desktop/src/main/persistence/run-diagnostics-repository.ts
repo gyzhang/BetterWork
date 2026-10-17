@@ -2,6 +2,7 @@ import type {
   AgentRuntimeEvent,
   HostDiagnosticEvent,
   ListRunDiagnosticsHistoryRequest,
+  RunDiagnosticIssueMark,
   RunDiagnosticNode,
   RunDiagnosticNodeDetail,
   RunDiagnosticsCursor,
@@ -14,12 +15,15 @@ import type {
   RunDiagnosticsRecording,
   RunDiagnosticsSummary,
   RunSummary,
+  SetRunDiagnosticIssueMarkRequest,
 } from '@betterwork/agent-protocol';
 import {
   agentRuntimeEventSchema,
   hostDiagnosticEventSchema,
   listRunDiagnosticsHistoryRequestSchema,
   RUN_DIAGNOSTIC_DETAIL_MAX_UTF8_BYTES,
+  RUN_DIAGNOSTICS_PAGE_SIZE_MAX,
+  runDiagnosticIssueMarkSchema,
   runDiagnosticNodeDetailSchema,
   runDiagnosticNodeSchema,
   runDiagnosticsHistoryPageSchema,
@@ -27,6 +31,7 @@ import {
   runDiagnosticsPageSchema,
   runDiagnosticsRecordingSchema,
   runDiagnosticsSummarySchema,
+  setRunDiagnosticIssueMarkRequestSchema,
 } from '@betterwork/agent-protocol';
 import type Database from 'better-sqlite3';
 
@@ -49,6 +54,14 @@ interface RunDiagnosticsHistoryRow {
   expert_id: string | null;
   expert_revision_id: string | null;
   model_fingerprint: string | null;
+}
+
+interface RunDiagnosticIssueMarkRow {
+  run_id: string;
+  category: RunDiagnosticIssueMark['category'];
+  diagnostic_node_id: string | null;
+  revision: number;
+  updated_at: number;
 }
 
 interface StoredCoreEventRow {
@@ -374,9 +387,128 @@ const nearestRank = (values: readonly number[], percentile: number): number | un
   return sorted[Math.ceil(percentile * sorted.length) - 1];
 };
 
+export class RunDiagnosticIssueMarkConflictError extends Error {
+  constructor() {
+    super('该 Run 的问题标记已在别处更新，请刷新后重试。');
+    this.name = 'RunDiagnosticIssueMarkConflictError';
+  }
+}
+
+export class RunDiagnosticIssueMarkScopeError extends Error {
+  constructor() {
+    super('问题标记的 Run 不属于当前 Workspace 与 Task。');
+    this.name = 'RunDiagnosticIssueMarkScopeError';
+  }
+}
+
+export class RunDiagnosticIssueMarkNodeError extends Error {
+  constructor() {
+    super('所选诊断节点不属于当前 Run。');
+    this.name = 'RunDiagnosticIssueMarkNodeError';
+  }
+}
+
 /** 从 Core Journal 构造只读执行链；不读取消息正文或 reasoning，也不写入第二份事件事实。 */
 export class RunDiagnosticsRepository {
   constructor(private readonly db: Database.Database) {}
+
+  getIssueMark(runId: string): RunDiagnosticIssueMark | undefined {
+    const row = this.db
+      .prepare(
+        `SELECT run_id, category, diagnostic_node_id, revision, updated_at
+         FROM run_diagnostic_issue_marks WHERE run_id = ?`,
+      )
+      .get(runId) as RunDiagnosticIssueMarkRow | undefined;
+    if (!row) return undefined;
+    return runDiagnosticIssueMarkSchema.parse({
+      runId: row.run_id,
+      category: row.category,
+      ...(row.diagnostic_node_id === null ? {} : { diagnosticNodeId: row.diagnostic_node_id }),
+      revision: row.revision,
+      updatedAt: row.updated_at,
+    });
+  }
+
+  setIssueMark(
+    input: SetRunDiagnosticIssueMarkRequest,
+    updatedAt: number,
+  ): RunDiagnosticIssueMark | null {
+    const request = setRunDiagnosticIssueMarkRequestSchema.parse(input);
+    return this.db.transaction(() => {
+      const run = this.db
+        .prepare(
+          `SELECT 1 AS present FROM runs r
+           INNER JOIN tasks t ON t.id = r.task_id
+           WHERE r.id = ? AND r.task_id = ? AND t.workspace_id = ?`,
+        )
+        .get(request.runId, request.taskId, request.workspaceId) as { present: number } | undefined;
+      if (!run) throw new RunDiagnosticIssueMarkScopeError();
+
+      const current = this.getIssueMark(request.runId);
+      const currentRevision = current?.revision ?? null;
+      if (currentRevision !== request.expectedRevision) {
+        throw new RunDiagnosticIssueMarkConflictError();
+      }
+
+      if (request.category === null) {
+        if (!current) return null;
+        const deleted = this.db
+          .prepare('DELETE FROM run_diagnostic_issue_marks WHERE run_id = ? AND revision = ?')
+          .run(request.runId, request.expectedRevision);
+        if (deleted.changes !== 1) throw new RunDiagnosticIssueMarkConflictError();
+        return null;
+      }
+
+      if (
+        request.diagnosticNodeId &&
+        !this.hasDiagnosticNode(request.runId, request.diagnosticNodeId)
+      ) {
+        throw new RunDiagnosticIssueMarkNodeError();
+      }
+
+      const revision = (currentRevision ?? 0) + 1;
+      if (current) {
+        const updated = this.db
+          .prepare(
+            `UPDATE run_diagnostic_issue_marks
+             SET category = ?, diagnostic_node_id = ?, revision = ?, updated_at = ?
+             WHERE run_id = ? AND revision = ?`,
+          )
+          .run(
+            request.category,
+            request.diagnosticNodeId ?? null,
+            revision,
+            updatedAt,
+            request.runId,
+            request.expectedRevision,
+          );
+        if (updated.changes !== 1) throw new RunDiagnosticIssueMarkConflictError();
+      } else {
+        const inserted = this.db
+          .prepare(
+            `INSERT INTO run_diagnostic_issue_marks
+               (run_id, category, diagnostic_node_id, revision, updated_at)
+             VALUES (?, ?, ?, ?, ?) ON CONFLICT(run_id) DO NOTHING`,
+          )
+          .run(
+            request.runId,
+            request.category,
+            request.diagnosticNodeId ?? null,
+            revision,
+            updatedAt,
+          );
+        if (inserted.changes !== 1) throw new RunDiagnosticIssueMarkConflictError();
+      }
+
+      return runDiagnosticIssueMarkSchema.parse({
+        runId: request.runId,
+        category: request.category,
+        ...(request.diagnosticNodeId ? { diagnosticNodeId: request.diagnosticNodeId } : {}),
+        revision,
+        updatedAt,
+      });
+    })();
+  }
 
   getSummary(runId: string): RunDiagnosticsSummary | undefined {
     const snapshot = this.snapshot(runId);
@@ -703,6 +835,25 @@ export class RunDiagnosticsRepository {
       truncated: bounded.truncated,
     };
     return runDiagnosticNodeDetailSchema.parse(detail);
+  }
+
+  private hasDiagnosticNode(runId: string, nodeId: string): boolean {
+    let cursor: RunDiagnosticsCursor | undefined;
+    const visitedCursors = new Set<string>();
+    while (true) {
+      const page = this.getPage({
+        runId,
+        pageSize: RUN_DIAGNOSTICS_PAGE_SIZE_MAX,
+        ...(cursor ? { cursor } : {}),
+      });
+      if (!page) return false;
+      if (page.nodes.some((node) => node.id === nodeId)) return true;
+      if (!page.nextCursor) return false;
+      const cursorKey = JSON.stringify(page.nextCursor);
+      if (visitedCursors.has(cursorKey)) return false;
+      visitedCursors.add(cursorKey);
+      cursor = page.nextCursor;
+    }
   }
 
   private snapshot(runId: string): DiagnosticsSnapshot | undefined {

@@ -5,6 +5,7 @@ import type {
   GetRunDiagnosticNodeDetailRequest,
   ListRunDiagnosticsHistoryRequest,
   ListRunDiagnosticsPageRequest,
+  RunDiagnosticIssueMark,
   RunDiagnosticNode,
   RunDiagnosticNodeDetail,
   RunDiagnosticsChangedEvent,
@@ -14,6 +15,7 @@ import type {
   RunDiagnosticsScopeRequest,
   RunDiagnosticsSources,
   RunDiagnosticsSummary,
+  SetRunDiagnosticIssueMarkRequest,
 } from '@betterwork/agent-protocol';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useState } from 'react';
@@ -217,12 +219,18 @@ const listHistory =
   vi.fn<(input: ListRunDiagnosticsHistoryRequest) => Promise<RunDiagnosticsHistoryPage>>();
 const getDetail =
   vi.fn<(input: GetRunDiagnosticNodeDetailRequest) => Promise<RunDiagnosticNodeDetail | null>>();
+const getIssueMark =
+  vi.fn<(input: RunDiagnosticsScopeRequest) => Promise<RunDiagnosticIssueMark | null>>();
+const setIssueMark =
+  vi.fn<(input: SetRunDiagnosticIssueMarkRequest) => Promise<RunDiagnosticIssueMark | null>>();
 const onEvent = vi.fn<(listener: (event: AgentRuntimeEvent) => void) => () => void>();
 const onDiagnosticsChanged =
   vi.fn<(listener: (event: RunDiagnosticsChangedEvent) => void) => () => void>();
 
 const installApi = (): void => {
   onDiagnosticsChanged.mockReturnValue(vi.fn());
+  getIssueMark.mockResolvedValue(null);
+  setIssueMark.mockResolvedValue(null);
   Object.defineProperty(window, 'betterwork', {
     configurable: true,
     value: {
@@ -232,6 +240,8 @@ const installApi = (): void => {
         listDiagnosticsPage: listPage,
         listDiagnosticsHistory: listHistory,
         getDiagnosticNodeDetail: getDetail,
+        getDiagnosticIssueMark: getIssueMark,
+        setDiagnosticIssueMark: setIssueMark,
         listEvents: vi.fn().mockResolvedValue([]),
         onEvent,
         onDiagnosticsChanged,
@@ -276,12 +286,82 @@ afterEach(() => {
   listPage.mockReset();
   listHistory.mockReset();
   getDetail.mockReset();
+  getIssueMark.mockReset();
+  setIssueMark.mockReset();
   onEvent.mockReset();
   onDiagnosticsChanged.mockReset();
   onDiagnosticsChanged.mockReturnValue(vi.fn());
 });
 
 describe('RunExecutionDetails', () => {
+  it('retains the selected issue mark after a save error and confirms a later save once', async () => {
+    installApi();
+    getSummary.mockResolvedValue(summary);
+    listPage.mockResolvedValue(pageOf());
+    onEvent.mockReturnValue(vi.fn());
+    setIssueMark.mockRejectedValueOnce(new Error('保存冲突')).mockResolvedValueOnce({
+      runId: scope.runId,
+      category: 'tool',
+      diagnosticNodeId: 'tool:tool-call-a',
+      revision: 1,
+      updatedAt: 30,
+    });
+
+    render(<RunExecutionDetails scope={scope} onClose={vi.fn()} />);
+    fireEvent.click(await screen.findByRole('button', { name: '问题类别' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: '工具' }));
+    fireEvent.click(screen.getByRole('button', { name: '关联过程节点（可选）' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /阅读资料 · tool:tool-call-a/u }));
+    fireEvent.click(screen.getByRole('button', { name: '保存标记' }));
+
+    expect(await screen.findByRole('alert')).toBeTruthy();
+    expect(screen.getByRole('button', { name: '问题类别' }).textContent).toContain('工具');
+    expect(screen.getByRole('button', { name: '关联过程节点（可选）' }).textContent).toContain(
+      'tool:tool-call-a',
+    );
+    expect(screen.queryByRole('status')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: '保存标记' }));
+    expect(await screen.findByRole('status')).toBeTruthy();
+    expect(screen.getByRole('status').textContent).toContain('问题标记已保存');
+    expect(setIssueMark).toHaveBeenNthCalledWith(1, {
+      ...scope,
+      expectedRevision: null,
+      category: 'tool',
+      diagnosticNodeId: 'tool:tool-call-a',
+    });
+    expect(setIssueMark).toHaveBeenNthCalledWith(2, {
+      ...scope,
+      expectedRevision: null,
+      category: 'tool',
+      diagnosticNodeId: 'tool:tool-call-a',
+    });
+  });
+
+  it('clears an existing issue mark with its expected revision and one local confirmation', async () => {
+    installApi();
+    getSummary.mockResolvedValue(summary);
+    listPage.mockResolvedValue(pageOf());
+    getIssueMark.mockResolvedValue({
+      runId: scope.runId,
+      category: 'model',
+      revision: 3,
+      updatedAt: 30,
+    });
+    onEvent.mockReturnValue(vi.fn());
+
+    render(<RunExecutionDetails scope={scope} onClose={vi.fn()} />);
+    fireEvent.click(await screen.findByRole('button', { name: '清除标记' }));
+
+    expect(await screen.findByRole('status')).toBeTruthy();
+    expect(screen.getByRole('status').textContent).toContain('问题标记已清除');
+    expect(setIssueMark).toHaveBeenCalledWith({
+      ...scope,
+      expectedRevision: 3,
+      category: null,
+    });
+  });
+
   it('shows a live model/tool chain, accurate text timing and unknown usage; loads tool payload on demand', async () => {
     installApi();
     getSummary.mockResolvedValue(summary);

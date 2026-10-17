@@ -5159,6 +5159,22 @@ select,
   min-width: 0;
   gap: var(--space-12);
 }
+.run-diagnostic-issue-mark {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-8);
+}
+.run-diagnostic-issue-mark-description {
+  margin: 0;
+  color: var(--text-secondary);
+}
+.run-diagnostic-issue-mark-fields {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  align-items: end;
+  gap: var(--space-12);
+}
 .run-diagnostics-history-filters {
   display: grid;
   min-width: 0;

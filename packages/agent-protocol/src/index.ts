@@ -4906,6 +4906,50 @@ export type GetRunDiagnosticNodeDetailRequest = z.infer<
   typeof getRunDiagnosticNodeDetailRequestSchema
 >;
 
+export const runDiagnosticIssueMarkCategorySchema = z.enum([
+  'model',
+  'tool',
+  'material',
+  'artifact',
+  'lifecycle',
+  'other',
+]);
+export type RunDiagnosticIssueMarkCategory = z.infer<typeof runDiagnosticIssueMarkCategorySchema>;
+
+export const runDiagnosticIssueMarkSchema = z
+  .object({
+    runId: z.string().min(1).max(512),
+    category: runDiagnosticIssueMarkCategorySchema,
+    diagnosticNodeId: z.string().min(1).max(512).optional(),
+    revision: z.number().int().positive(),
+    updatedAt: z.number().int().nonnegative(),
+  })
+  .strict();
+export type RunDiagnosticIssueMark = z.infer<typeof runDiagnosticIssueMarkSchema>;
+export const runDiagnosticIssueMarkResponseSchema = runDiagnosticIssueMarkSchema.nullable();
+
+export const getRunDiagnosticIssueMarkRequestSchema = runDiagnosticsScopeRequestSchema;
+export const setRunDiagnosticIssueMarkRequestSchema = z
+  .object({
+    ...runDiagnosticsScopeRequestSchema.shape,
+    expectedRevision: z.number().int().positive().nullable(),
+    category: runDiagnosticIssueMarkCategorySchema.nullable(),
+    diagnosticNodeId: z.string().min(1).max(512).optional(),
+  })
+  .strict()
+  .superRefine((request, context) => {
+    if (request.category === null && request.diagnosticNodeId !== undefined) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['diagnosticNodeId'],
+        message: '清除问题标记时不能关联诊断节点',
+      });
+    }
+  });
+export type SetRunDiagnosticIssueMarkRequest = z.infer<
+  typeof setRunDiagnosticIssueMarkRequestSchema
+>;
+
 export const runDiagnosticsPageQuerySchema = z
   .object({
     runId: z.string().min(1),
@@ -6819,6 +6863,8 @@ export const IpcChannel = {
   GetRunDiagnosticsSources: 'run:diagnostics-sources',
   ListRunDiagnosticsPage: 'run:diagnostics-page',
   ListRunDiagnosticsHistory: 'run:diagnostics-history',
+  GetRunDiagnosticIssueMark: 'run:diagnostic-issue-mark:get',
+  SetRunDiagnosticIssueMark: 'run:diagnostic-issue-mark:set',
   GetRunDiagnosticNodeDetail: 'run:diagnostic-node-detail',
   GetDefaultWorkspace: 'workspace:get-default',
   /** 只弹目录选择器并返回路径：选目录不等于建空间，登记走 workspace:create。 */
@@ -6987,6 +7033,12 @@ export interface BetterWorkDesktopApi {
     listDiagnosticsHistory(
       input: ListRunDiagnosticsHistoryRequest,
     ): Promise<RunDiagnosticsHistoryPage>;
+    getDiagnosticIssueMark(
+      input: RunDiagnosticsScopeRequest,
+    ): Promise<RunDiagnosticIssueMark | null>;
+    setDiagnosticIssueMark(
+      input: SetRunDiagnosticIssueMarkRequest,
+    ): Promise<RunDiagnosticIssueMark | null>;
     getDiagnosticNodeDetail(
       input: GetRunDiagnosticNodeDetailRequest,
     ): Promise<RunDiagnosticNodeDetail | null>;

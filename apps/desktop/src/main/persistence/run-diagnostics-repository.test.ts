@@ -754,4 +754,113 @@ describe('RunDiagnosticsRepository', () => {
     );
     expect(repeated?.summary.taskId).toBe(duplicateTaskId);
   });
+
+  it('saves one problem mark per Run with same-Run node validation and revision CAS', () => {
+    const store = openStore();
+    const workspaceId = store.workspaces.getOrCreate(
+      '/tmp/run-diagnostics/mark-shared',
+      'marks',
+    ).id;
+    const taskA = store.tasks.create(workspaceId, 'mark-task-a', 'diagnostics fixture');
+    const taskB = store.tasks.create(workspaceId, 'mark-task-b', 'diagnostics fixture');
+    store.runs.create(
+      {
+        id: 'mark-run-a',
+        taskId: taskA.task.id,
+        sessionId: taskA.sessionId,
+        prompt: 'private prompt',
+        status: 'running',
+        createdAt: 1,
+      },
+      { version: 1, sections: ['core'] },
+    );
+    store.runs.create(
+      {
+        id: 'mark-run-b',
+        taskId: taskB.task.id,
+        sessionId: taskB.sessionId,
+        prompt: 'private prompt',
+        status: 'running',
+        createdAt: 2,
+      },
+      { version: 1, sections: ['core'] },
+    );
+    for (const { runId, callId } of [
+      { runId: 'mark-run-a', callId: 'call-a' },
+      { runId: 'mark-run-b', callId: 'call-b' },
+    ]) {
+      store.runs.appendEvent(
+        event(runId, 0, {
+          type: 'model.started',
+          modelCallId: callId,
+          round: 0,
+          providerId: 'fixture',
+          messageCount: 1,
+          toolDefinitionCount: 0,
+        }),
+      );
+      store.runs.appendEvent(
+        event(runId, 1, {
+          type: 'model.completed',
+          modelCallId: callId,
+          round: 0,
+          durationMs: 12,
+        }),
+      );
+    }
+
+    const scopedInput = {
+      workspaceId,
+      taskId: taskA.task.id,
+      runId: 'mark-run-a',
+    };
+    const input = {
+      ...scopedInput,
+      expectedRevision: null,
+      category: 'model' as const,
+      diagnosticNodeId: 'model:call-a',
+    };
+    expect(store.runDiagnostics.setIssueMark(input, 100)).toMatchObject({
+      runId: input.runId,
+      category: 'model',
+      diagnosticNodeId: 'model:call-a',
+      revision: 1,
+      updatedAt: 100,
+    });
+    expect(store.runDiagnostics.getIssueMark(input.runId)).toMatchObject({ revision: 1 });
+    expect(() => store.runDiagnostics.setIssueMark(input, 101)).toThrow(/已在别处更新/u);
+    expect(() =>
+      store.runDiagnostics.setIssueMark(
+        {
+          ...scopedInput,
+          expectedRevision: 1,
+          category: 'model',
+          diagnosticNodeId: 'model:call-b',
+        },
+        102,
+      ),
+    ).toThrow(/不属于当前 Run/u);
+
+    const updated = store.runDiagnostics.setIssueMark(
+      { ...scopedInput, expectedRevision: 1, category: 'tool' },
+      103,
+    );
+    expect(updated).toMatchObject({ category: 'tool', revision: 2, updatedAt: 103 });
+    expect(
+      store.runDiagnostics.setIssueMark(
+        { ...scopedInput, expectedRevision: 2, category: null },
+        104,
+      ),
+    ).toBeNull();
+    expect(store.runDiagnostics.getIssueMark(input.runId)).toBeUndefined();
+    expect(
+      store.runDiagnostics.setIssueMark(
+        { ...scopedInput, expectedRevision: null, category: 'other' },
+        105,
+      ),
+    ).toMatchObject({ category: 'other', revision: 1 });
+    const db = (store as unknown as { db: Database.Database }).db;
+    db.prepare('DELETE FROM runs WHERE id = ?').run(input.runId);
+    expect(store.runDiagnostics.getIssueMark(input.runId)).toBeUndefined();
+  });
 });

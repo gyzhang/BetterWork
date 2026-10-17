@@ -109,7 +109,7 @@ IPC channel 只在有实际 Main/Preload/Hook 消费者的卡中注册。Host �
 
 问题标记为用户显式操作，保存 runId、分类（`model / tool / material / artifact / lifecycle / other`）、可选诊断节点引用和更新时间；不保存自由文本备注、私有正文或自动写 Memory。保持每 Run 一个当前标记，允许更改和清除；修改标记不改变 Run。
 
-新增标记表在对应卡追加迁移，run 外键级联删除；节点引用必须属于该 Run。禁止预先建立通用反馈/训练平台。
+新增标记表在对应卡追加迁移，run 外键级联删除；节点引用必须属于该 Run。每 Run 只有一条当前标记，以 revision 和 expectedRevision 做比较并交换，避免并发更新互相覆盖；IPC 同时验证 Workspace→Task→Run 归属。保存失败保留界面所选值，成功只给局部短时确认。禁止预先建立通用反馈/训练平台。
 
 本地 JSON 诊断包有 schemaVersion、生成时间、代码/策略版本（可取得时）、Run/调用标识、受控分类/状态、计数/耗时、快照 ID/哈希和完整性/截断说明。文件保存由 Main 复用现有选择/导出设施，取消保存不报失败；不是新 Artifact 类型，不触发模型。
 

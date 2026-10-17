@@ -1312,6 +1312,52 @@ describe('registerIpc', () => {
     });
     const scopeA = { workspaceId: workspaceA.id, taskId: taskA.task.id, runId: runA };
 
+    await expect(invoke(IpcChannel.GetRunDiagnosticIssueMark, scopeA)).resolves.toBeNull();
+    await expect(
+      invoke(IpcChannel.SetRunDiagnosticIssueMark, {
+        ...scopeA,
+        expectedRevision: null,
+        category: 'tool',
+        diagnosticNodeId: 'tool:ipc-tool-a',
+      }),
+    ).resolves.toMatchObject({
+      runId: runA,
+      category: 'tool',
+      diagnosticNodeId: 'tool:ipc-tool-a',
+      revision: 1,
+    });
+    await expect(
+      invoke(IpcChannel.SetRunDiagnosticIssueMark, {
+        ...scopeA,
+        expectedRevision: null,
+        category: 'model',
+      }),
+    ).rejects.toMatchObject({ name: 'RunDiagnosticIssueMarkConflictError' });
+    await expect(
+      invoke(IpcChannel.SetRunDiagnosticIssueMark, {
+        ...scopeA,
+        expectedRevision: 1,
+        category: 'model',
+        diagnosticNodeId: 'tool:ipc-tool-b',
+      }),
+    ).rejects.toMatchObject({ name: 'RunDiagnosticIssueMarkNodeError' });
+    await expect(
+      invoke(IpcChannel.SetRunDiagnosticIssueMark, {
+        ...scopeA,
+        expectedRevision: 1,
+        category: null,
+      }),
+    ).resolves.toBeNull();
+    await expect(invoke(IpcChannel.GetRunDiagnosticIssueMark, scopeA)).resolves.toBeNull();
+    await expect(
+      invoke(IpcChannel.SetRunDiagnosticIssueMark, {
+        ...scopeA,
+        taskId: taskB.task.id,
+        expectedRevision: null,
+        category: 'other',
+      }),
+    ).rejects.toMatchObject({ name: 'RunDiagnosticIssueMarkScopeError' });
+
     await expect(invoke(IpcChannel.GetRunDiagnosticsSummary, scopeA)).resolves.toMatchObject({
       runId: runA,
       taskId: taskA.task.id,

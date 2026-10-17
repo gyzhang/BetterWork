@@ -242,7 +242,12 @@ export {
   type RunContextSnapshot,
   RunContextSnapshotRepository,
 } from './run-context-snapshot-repository';
-export { RunDiagnosticsRepository } from './run-diagnostics-repository';
+export {
+  RunDiagnosticIssueMarkConflictError,
+  RunDiagnosticIssueMarkNodeError,
+  RunDiagnosticIssueMarkScopeError,
+  RunDiagnosticsRepository,
+} from './run-diagnostics-repository';
 export { RunHostDiagnosticRepository } from './run-host-diagnostic-repository';
 export { RunMaterialReadRepository } from './run-material-read-repository';
 export {

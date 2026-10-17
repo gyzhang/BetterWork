@@ -70,6 +70,7 @@ import {
   getMemorySettingsRequestSchema,
   getNotificationRequestSchema,
   getRunArtifactDeclarationsRequestSchema,
+  getRunDiagnosticIssueMarkRequestSchema,
   getRunDiagnosticNodeDetailRequestSchema,
   getRunDiagnosticsSummaryRequestSchema,
   getRunMemoryContextRequestSchema,
@@ -182,6 +183,7 @@ import {
   revealFileArtifactResultSchema,
   revokeSkillTrustRequestSchema,
   runArtifactSourceDeclarationSchema,
+  runDiagnosticIssueMarkResponseSchema,
   runDiagnosticNodeDetailResponseSchema,
   runDiagnosticsHistoryPageResponseSchema,
   runDiagnosticsPageResponseSchema,
@@ -229,6 +231,7 @@ import {
   setMemorySettingsRequestSchema,
   setMemoryStatusRequestSchema,
   setModelEnabledRequestSchema,
+  setRunDiagnosticIssueMarkRequestSchema,
   setScheduleLifecycleRequestSchema,
   setSkillEnabledRequestSchema,
   setSkillTrustRequestSchema,
@@ -669,6 +672,21 @@ function registerRunChannels({ store, runs, knowledgeVault }: IpcDependencies): 
     listRunDiagnosticsHistoryRequestSchema,
     runDiagnosticsHistoryPageResponseSchema,
     (input) => store.runDiagnostics.getHistoryPage(input),
+  );
+  handleInput(
+    IpcChannel.GetRunDiagnosticIssueMark,
+    getRunDiagnosticIssueMarkRequestSchema,
+    runDiagnosticIssueMarkResponseSchema,
+    (input) =>
+      isDiagnosticsScopeValid(input)
+        ? (store.runDiagnostics.getIssueMark(input.runId) ?? null)
+        : null,
+  );
+  handleInput(
+    IpcChannel.SetRunDiagnosticIssueMark,
+    setRunDiagnosticIssueMarkRequestSchema,
+    runDiagnosticIssueMarkResponseSchema,
+    (input) => store.runDiagnostics.setIssueMark(input, Date.now()),
   );
   handleInput(
     IpcChannel.GetRunDiagnosticNodeDetail,
