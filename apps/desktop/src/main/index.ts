@@ -758,6 +758,7 @@ function bootstrap(initiallySuspended: boolean): ApplicationContext {
     dependencyLocksRoot,
     getWindow,
     getDefaultWorkspaceRoot: () => defaultWorkspaceRoot,
+    getApplicationVersion: () => app.getVersion(),
     ...(credentialAccess ? { credentialAccess } : {}),
   });
   return started;

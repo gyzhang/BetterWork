@@ -5164,6 +5164,11 @@ select,
   min-width: 0;
   gap: var(--space-8);
 }
+.run-diagnostic-package-export {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-8);
+}
 .run-diagnostic-issue-mark-description {
   margin: 0;
   color: var(--text-secondary);

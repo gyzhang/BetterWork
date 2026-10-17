@@ -60,6 +60,7 @@ import {
   retryScheduleOutputRequestSchema,
   runDiagnosticIssueMarkSchema,
   runDiagnosticNodeSchema,
+  runDiagnosticPackageSchema,
   runDiagnosticsChangedEventSchema,
   runDiagnosticsCursorSchema,
   runDiagnosticsHistoryPageSchema,
@@ -2797,5 +2798,86 @@ describe('diagnostic issue mark protocol', () => {
         updatedAt: 100,
       }).success,
     ).toBe(true);
+  });
+});
+
+describe('run diagnostic package protocol', () => {
+  it('accepts only versioned diagnostic facts and rejects private or unknown fields', () => {
+    const data = {
+      schemaVersion: 1,
+      generatedAt: 100,
+      applicationVersion: '1.2.0',
+      run: {
+        id: 'run-1',
+        taskId: 'task-1',
+        sessionId: 'session-1',
+        status: 'completed',
+        createdAt: 10,
+        completedAt: 30,
+      },
+      diagnostics: {
+        integrity: 'complete',
+        summary: {
+          modelCallCount: 1,
+          toolCallCount: 0,
+          toolExecutionCount: 0,
+          failedToolExecutionCount: 0,
+          rejectedToolCallCount: 0,
+          usage: {
+            promptTokens: { knownSubtotal: '4', knownCallCount: 1, missingCallCount: 0 },
+            completionTokens: { knownSubtotal: '6', knownCallCount: 1, missingCallCount: 0 },
+            totalTokens: { knownSubtotal: '10', knownCallCount: 1, missingCallCount: 0 },
+          },
+        },
+        nodes: [
+          {
+            id: 'model:call-1',
+            kind: 'model',
+            status: 'completed',
+            sourceKind: 'core-journal',
+            evidenceState: 'recorded',
+            sourceSequenceStart: 1,
+            sourceSequenceEnd: 2,
+            modelCallId: 'call-1',
+            durationMs: 20,
+          },
+        ],
+      },
+      issueMark: { category: 'tool', diagnosticNodeId: 'tool:call-1' },
+      sources: {
+        integrity: 'complete',
+        fixedContext: { state: 'recorded', skills: [] },
+        materials: { state: 'recorded', selected: [], reads: [] },
+        memory: { state: 'recorded', selectedItems: [], readCount: 0, replayCount: 0 },
+        continuity: {
+          state: 'not-recorded',
+          omissions: [],
+          sourceRunIds: [],
+          artifactVersionIds: [],
+        },
+        artifacts: { state: 'not-recorded', producedVersions: [], inputRelations: [] },
+      },
+    };
+
+    expect(runDiagnosticPackageSchema.safeParse(data).success).toBe(true);
+    expect(
+      runDiagnosticPackageSchema.safeParse({
+        ...data,
+        run: { ...data.run, prompt: 'sk-private-secret' },
+      }).success,
+    ).toBe(false);
+    expect(
+      runDiagnosticPackageSchema.safeParse({
+        ...data,
+        sources: {
+          ...data.sources,
+          materials: {
+            state: 'recorded',
+            selected: [{ title: '/private/customer.md' }],
+            reads: [],
+          },
+        },
+      }).success,
+    ).toBe(false);
   });
 });

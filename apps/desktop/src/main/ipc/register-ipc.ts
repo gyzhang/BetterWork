@@ -55,6 +55,8 @@ import {
   exportFileArtifactResultSchema,
   exportMarkdownArtifactRequestSchema,
   exportMarkdownArtifactResultSchema,
+  exportRunDiagnosticPackageRequestSchema,
+  exportRunDiagnosticPackageResultSchema,
   exportSkillRequestSchema,
   fileArtifactDetailSchema,
   getArtifactRequestSchema,
@@ -316,6 +318,7 @@ import type { MemoryService } from '../services/memory-service';
 import { probeModelConnection } from '../services/model-connectivity';
 import type { NotificationService } from '../services/notification-service';
 import { ResearchDraftService } from '../services/research-draft-service';
+import { RunDiagnosticPackageService } from '../services/run-diagnostic-package-service';
 import { RunDiagnosticsSourcesService } from '../services/run-diagnostics-sources';
 import type { RunService } from '../services/run-service';
 import { nextTimes, resolveSchedulePeriod } from '../services/schedule-calendar';
@@ -382,6 +385,7 @@ export interface IpcDependencies {
   readonly getWindow: () => BrowserWindow | null;
   /** 启动期默认空间初始化选定的根目录；已有数据库保留旧默认路径。 */
   readonly getDefaultWorkspaceRoot: () => string;
+  readonly getApplicationVersion?: () => string;
 }
 
 /** 导出文件名里不能出现的字符，统一替换为连字符。 */
@@ -604,8 +608,12 @@ export function registerIpc(deps: IpcDependencies): void {
   registerWindowChannels(deps);
 }
 
-function registerRunChannels({ store, runs, knowledgeVault }: IpcDependencies): void {
+function registerRunChannels(deps: IpcDependencies): void {
+  const { store, runs, knowledgeVault } = deps;
   const sources = new RunDiagnosticsSourcesService(store, knowledgeVault);
+  const diagnosticPackage = new RunDiagnosticPackageService(store, sources, {
+    ...(deps.getApplicationVersion ? { applicationVersion: deps.getApplicationVersion } : {}),
+  });
   const isDiagnosticsScopeValid = (input: {
     workspaceId: string;
     taskId: string;
@@ -696,6 +704,22 @@ function registerRunChannels({ store, runs, knowledgeVault }: IpcDependencies): 
       isDiagnosticsScopeValid(input)
         ? (store.runDiagnostics.getNodeDetail(input.runId, input.nodeId) ?? null)
         : null,
+  );
+  handleInput(
+    IpcChannel.ExportRunDiagnosticPackage,
+    exportRunDiagnosticPackageRequestSchema,
+    exportRunDiagnosticPackageResultSchema,
+    async (input) => {
+      const exported = diagnosticPackage.create(input);
+      const result = await showSaveDialog(deps, {
+        title: '导出 Run 诊断包',
+        defaultPath: 'betterwork-run-diagnostics.json',
+        filters: [{ name: 'JSON', extensions: ['json'] }],
+      });
+      if (result.canceled || !result.filePath) return { cancelled: true };
+      await writeFile(result.filePath, exported.json, { encoding: 'utf8', mode: 0o600 });
+      return { cancelled: false, byteLength: exported.byteLength };
+    },
   );
   handleOptionalInput(
     IpcChannel.ListRuns,

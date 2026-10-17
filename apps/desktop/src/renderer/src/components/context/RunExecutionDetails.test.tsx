@@ -2,6 +2,7 @@
 
 import type {
   AgentRuntimeEvent,
+  ExportRunDiagnosticPackageResult,
   GetRunDiagnosticNodeDetailRequest,
   ListRunDiagnosticsHistoryRequest,
   ListRunDiagnosticsPageRequest,
@@ -223,6 +224,8 @@ const getIssueMark =
   vi.fn<(input: RunDiagnosticsScopeRequest) => Promise<RunDiagnosticIssueMark | null>>();
 const setIssueMark =
   vi.fn<(input: SetRunDiagnosticIssueMarkRequest) => Promise<RunDiagnosticIssueMark | null>>();
+const exportPackage =
+  vi.fn<(input: RunDiagnosticsScopeRequest) => Promise<ExportRunDiagnosticPackageResult>>();
 const onEvent = vi.fn<(listener: (event: AgentRuntimeEvent) => void) => () => void>();
 const onDiagnosticsChanged =
   vi.fn<(listener: (event: RunDiagnosticsChangedEvent) => void) => () => void>();
@@ -242,6 +245,7 @@ const installApi = (): void => {
         getDiagnosticNodeDetail: getDetail,
         getDiagnosticIssueMark: getIssueMark,
         setDiagnosticIssueMark: setIssueMark,
+        exportDiagnosticPackage: exportPackage,
         listEvents: vi.fn().mockResolvedValue([]),
         onEvent,
         onDiagnosticsChanged,
@@ -288,12 +292,50 @@ afterEach(() => {
   getDetail.mockReset();
   getIssueMark.mockReset();
   setIssueMark.mockReset();
+  exportPackage.mockReset();
   onEvent.mockReset();
   onDiagnosticsChanged.mockReset();
   onDiagnosticsChanged.mockReturnValue(vi.fn());
 });
 
 describe('RunExecutionDetails', () => {
+  it('keeps a cancelled diagnostic package save silent', async () => {
+    installApi();
+    getSummary.mockResolvedValue(summary);
+    listPage.mockResolvedValue(pageOf());
+    onEvent.mockReturnValue(vi.fn());
+    exportPackage.mockResolvedValue({ cancelled: true });
+
+    render(<RunExecutionDetails scope={scope} onClose={vi.fn()} />);
+    fireEvent.click(await screen.findByRole('button', { name: '导出本 Run 诊断包' }));
+
+    await waitFor(() => expect(exportPackage).toHaveBeenCalledWith(scope));
+    expect(screen.queryByRole('status')).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('shows export errors inline and retries the same Run before confirming success once', async () => {
+    installApi();
+    getSummary.mockResolvedValue(summary);
+    listPage.mockResolvedValue(pageOf());
+    onEvent.mockReturnValue(vi.fn());
+    exportPackage
+      .mockRejectedValueOnce(new Error('目标文件不可写'))
+      .mockResolvedValueOnce({ cancelled: false, byteLength: 321 });
+
+    render(<RunExecutionDetails scope={scope} onClose={vi.fn()} />);
+    fireEvent.click(await screen.findByRole('button', { name: '导出本 Run 诊断包' }));
+
+    expect((await screen.findByRole('alert')).textContent).toContain('目标文件不可写');
+    expect(screen.queryByRole('status')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '重试' }));
+
+    expect((await screen.findByRole('status')).textContent).toContain('诊断包已保存（321 字节）');
+    expect(exportPackage).toHaveBeenNthCalledWith(1, scope);
+    expect(exportPackage).toHaveBeenNthCalledWith(2, scope);
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
   it('retains the selected issue mark after a save error and confirms a later save once', async () => {
     installApi();
     getSummary.mockResolvedValue(summary);

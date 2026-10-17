@@ -65,6 +65,8 @@ import {
   exportFileArtifactResultSchema,
   exportMarkdownArtifactRequestSchema,
   exportMarkdownArtifactResultSchema,
+  exportRunDiagnosticPackageRequestSchema,
+  exportRunDiagnosticPackageResultSchema,
   exportSkillRequestSchema,
   fileArtifactDetailSchema,
   getArtifactRequestSchema,
@@ -403,6 +405,11 @@ const runInvokeContracts = defineInvokeContracts({
     request: setRunDiagnosticIssueMarkRequestSchema,
     response: runDiagnosticIssueMarkResponseSchema,
   },
+  [IpcChannel.ExportRunDiagnosticPackage]: {
+    channel: IpcChannel.ExportRunDiagnosticPackage,
+    request: exportRunDiagnosticPackageRequestSchema,
+    response: exportRunDiagnosticPackageResultSchema,
+  },
   [IpcChannel.GetRunDiagnosticNodeDetail]: {
     channel: IpcChannel.GetRunDiagnosticNodeDetail,
     request: getRunDiagnosticNodeDetailRequestSchema,
@@ -512,6 +519,8 @@ const runInvokeMethods: InvokeMethodsByChannel<typeof runInvokeContracts> = {
     invokeContract(runInvokeContracts[IpcChannel.GetRunDiagnosticIssueMark], input),
   [IpcChannel.SetRunDiagnosticIssueMark]: (input) =>
     invokeContract(runInvokeContracts[IpcChannel.SetRunDiagnosticIssueMark], input),
+  [IpcChannel.ExportRunDiagnosticPackage]: (input) =>
+    invokeContract(runInvokeContracts[IpcChannel.ExportRunDiagnosticPackage], input),
   [IpcChannel.GetRunDiagnosticNodeDetail]: (input) =>
     invokeContract(runInvokeContracts[IpcChannel.GetRunDiagnosticNodeDetail], input),
   [IpcChannel.GetRunSettings]: (input) =>
@@ -1791,6 +1800,8 @@ const api: BetterWorkDesktopApi = {
       runInvokeMethods[IpcChannel.GetRunDiagnosticIssueMark](input),
     setDiagnosticIssueMark: (input) =>
       runInvokeMethods[IpcChannel.SetRunDiagnosticIssueMark](input),
+    exportDiagnosticPackage: (input) =>
+      runInvokeMethods[IpcChannel.ExportRunDiagnosticPackage](input),
     getDiagnosticNodeDetail: (input) =>
       runInvokeMethods[IpcChannel.GetRunDiagnosticNodeDetail](input),
     onEvent: (listener) => runEventMethods[IpcChannel.RunEvent](listener),

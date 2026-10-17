@@ -13,6 +13,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { useRunDiagnosticIssueMark } from '../../hooks/use-run-diagnostic-issue-mark';
 import { useRunDiagnosticNodeDetail } from '../../hooks/use-run-diagnostic-node-detail';
+import { useRunDiagnosticPackageExport } from '../../hooks/use-run-diagnostic-package-export';
 import { useRunDiagnostics } from '../../hooks/use-run-diagnostics';
 import { useRunDiagnosticsHistory } from '../../hooks/use-run-diagnostics-history';
 import { runStatusName, toolStageLabel } from '../../lib/labels';
@@ -318,9 +319,13 @@ export function RunExecutionDetails({
               </ul>
             )}
             <RunDiagnosticIssueMarkPanel
-              key={activeScope.runId}
+              key={`issue-mark:${activeScope.runId}`}
               scope={activeScope}
               nodes={diagnostics.nodes}
+            />
+            <RunDiagnosticPackageExport
+              key={`package-export:${activeScope.runId}`}
+              scope={activeScope}
             />
           </TabPanel>
           <TabPanel value="timeline" className="run-execution-details-panel">
@@ -423,6 +428,39 @@ export function RunExecutionDetails({
         </div>
       </Tabs>
     </Modal>
+  );
+}
+
+function RunDiagnosticPackageExport({
+  scope,
+}: {
+  scope: RunDiagnosticsScopeRequest;
+}): React.JSX.Element {
+  const exportPackage = useRunDiagnosticPackageExport(scope);
+
+  return (
+    <section className="run-diagnostic-package-export">
+      <SectionHeader variant="panel" title="诊断包" />
+      <p className="run-execution-node-fact">
+        仅保存脱敏后的本 Run 元数据，最大 5 MiB；文件位置由你选择。
+      </p>
+      <ActionBar as="div" label="导出 Run 诊断包">
+        <AsyncButton
+          variant="secondary"
+          size="sm"
+          busy={exportPackage.busy}
+          label="导出本 Run 诊断包"
+          busyLabel="正在导出诊断包…"
+          onClick={exportPackage.run}
+        />
+      </ActionBar>
+      {exportPackage.error && (
+        <InlineError message={exportPackage.error} onRetry={exportPackage.run} />
+      )}
+      {exportPackage.toast && (
+        <TransientToast {...exportPackage.toast} onDismiss={exportPackage.dismissToast} />
+      )}
+    </section>
   );
 }
 

@@ -319,7 +319,11 @@ describe('run preload API', () => {
       },
     };
     mocks.invoke.mockImplementation(async (channel) =>
-      channel === IpcChannel.ListRunDiagnosticsHistory ? historyPage : null,
+      channel === IpcChannel.ListRunDiagnosticsHistory
+        ? historyPage
+        : channel === IpcChannel.ExportRunDiagnosticPackage
+          ? { cancelled: true }
+          : null,
     );
     const scope = { workspaceId: 'workspace-1', taskId: 'task-1', runId: 'run-1' };
     await Promise.all([
@@ -334,6 +338,7 @@ describe('run preload API', () => {
         category: 'model',
       }),
       api().runs.getDiagnosticNodeDetail({ ...scope, nodeId: 'tool:tool-1' }),
+      api().runs.exportDiagnosticPackage(scope),
     ]);
     expect(mocks.invoke.mock.calls).toEqual([
       [IpcChannel.GetRunDiagnosticsSummary, scope],
@@ -349,6 +354,7 @@ describe('run preload API', () => {
         { ...scope, expectedRevision: null, category: 'model' },
       ],
       [IpcChannel.GetRunDiagnosticNodeDetail, { ...scope, nodeId: 'tool:tool-1' }],
+      [IpcChannel.ExportRunDiagnosticPackage, scope],
     ]);
 
     expect(() => api().runs.listDiagnosticsPage({ ...scope, pageSize: 201 })).toThrow();
@@ -374,6 +380,8 @@ describe('run preload API', () => {
 
     mocks.invoke.mockResolvedValueOnce({});
     await expect(api().runs.getDiagnosticsSummary(scope)).rejects.toThrow();
+    mocks.invoke.mockResolvedValueOnce({ cancelled: false });
+    await expect(api().runs.exportDiagnosticPackage(scope)).rejects.toThrow();
   });
 
   it('validates Run events through their mapped channel and removes the listener', () => {

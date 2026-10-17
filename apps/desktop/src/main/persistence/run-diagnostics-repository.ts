@@ -412,6 +412,11 @@ export class RunDiagnosticIssueMarkNodeError extends Error {
 export class RunDiagnosticsRepository {
   constructor(private readonly db: Database.Database) {}
 
+  /** 返回一次性 Core/Host 完整投影，避免导出混合多次分页读取。 */
+  getExportSnapshot(runId: string): DiagnosticsSnapshot | undefined {
+    return this.snapshot(runId);
+  }
+
   getIssueMark(runId: string): RunDiagnosticIssueMark | undefined {
     const row = this.db
       .prepare(

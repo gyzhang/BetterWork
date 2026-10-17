@@ -5394,6 +5394,276 @@ export const runDiagnosticsSourcesSchema = z
 export type RunDiagnosticsSources = z.infer<typeof runDiagnosticsSourcesSchema>;
 export const runDiagnosticsSourcesResponseSchema = runDiagnosticsSourcesSchema.nullable();
 
+export const RUN_DIAGNOSTIC_PACKAGE_MAX_BYTES = 5 * 1024 * 1024;
+export const RUN_DIAGNOSTIC_PACKAGE_SCHEMA_VERSION = 1;
+
+export const runDiagnosticPackageIdentifierSchema = z
+  .string()
+  .min(1)
+  .max(512)
+  .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/u)
+  .refine(
+    (value) =>
+      !/(?:sk|pk|rk)-[A-Za-z0-9_-]{8,}|api[_-]?key|secret|password|credential|bearer/iu.test(value),
+    '标识符包含不允许导出的敏感标记',
+  );
+
+export const runDiagnosticPackageHashSchema = z.string().regex(/^[a-f0-9]{64}$/u);
+
+export const runDiagnosticPackageReferenceSchema = z
+  .object({
+    kind: z.enum([
+      'knowledge-revision',
+      'artifact-version',
+      'workspace-input-snapshot',
+      'evidence',
+    ]),
+    state: runDiagnosticSourceStateSchema,
+    documentId: runDiagnosticPackageIdentifierSchema.optional(),
+    revisionId: runDiagnosticPackageIdentifierSchema.optional(),
+    artifactId: runDiagnosticPackageIdentifierSchema.optional(),
+    versionId: runDiagnosticPackageIdentifierSchema.optional(),
+    snapshotId: runDiagnosticPackageIdentifierSchema.optional(),
+    evidenceId: runDiagnosticPackageIdentifierSchema.optional(),
+    contentHash: runDiagnosticPackageHashSchema.optional(),
+  })
+  .strict();
+export type RunDiagnosticPackageReference = z.infer<typeof runDiagnosticPackageReferenceSchema>;
+
+export const runDiagnosticPackageNodeSchema = z
+  .object({
+    id: runDiagnosticPackageIdentifierSchema,
+    parentId: runDiagnosticPackageIdentifierSchema.optional(),
+    kind: runDiagnosticNodeKindSchema,
+    status: runDiagnosticNodeStatusSchema,
+    sourceKind: runDiagnosticNodeSourceKindSchema,
+    evidenceState: runDiagnosticEvidenceStateSchema,
+    sourceSequenceStart: z.number().int().nonnegative().optional(),
+    sourceSequenceEnd: z.number().int().nonnegative().optional(),
+    occurredAt: z.number().int().nonnegative().optional(),
+    round: z.number().int().nonnegative().optional(),
+    operationId: runDiagnosticPackageIdentifierSchema.optional(),
+    executionId: runDiagnosticPackageIdentifierSchema.optional(),
+    hostKind: runDiagnosticHostKindSchema.optional(),
+    hostPhase: runDiagnosticHostPhaseSchema.optional(),
+    modelCallId: runDiagnosticPackageIdentifierSchema.optional(),
+    toolCallId: runDiagnosticPackageIdentifierSchema.optional(),
+    executionState: z.enum(['not-started', 'started']).optional(),
+    startedAt: z.number().int().nonnegative().optional(),
+    endedAt: z.number().int().nonnegative().optional(),
+    durationMs: z.number().finite().nonnegative().optional(),
+    timeToFirstTextMs: z.number().finite().nonnegative().optional(),
+    finishReason: modelFinishReasonSchema.optional(),
+    usage: modelUsageSchema.optional(),
+  })
+  .strict();
+
+const runDiagnosticPackageSummarySchema = z
+  .object({
+    modelCallCount: z.number().int().nonnegative(),
+    toolCallCount: z.number().int().nonnegative(),
+    toolExecutionCount: z.number().int().nonnegative(),
+    failedToolExecutionCount: z.number().int().nonnegative(),
+    rejectedToolCallCount: z.number().int().nonnegative(),
+    usage: runDiagnosticsUsageSchema,
+  })
+  .strict();
+
+const runDiagnosticPackageSourcesSchema = z
+  .object({
+    integrity: runDiagnosticsIntegritySchema,
+    fixedContext: z
+      .object({
+        state: runDiagnosticSourceStateSchema,
+        taskContextRevisionId: runDiagnosticPackageIdentifierSchema.optional(),
+        expert: z
+          .object({
+            state: runDiagnosticSourceStateSchema,
+            expertId: runDiagnosticPackageIdentifierSchema,
+            revisionId: runDiagnosticPackageIdentifierSchema,
+            revision: z.number().int().positive().optional(),
+          })
+          .strict()
+          .optional(),
+        model: z
+          .object({ fingerprint: runDiagnosticPackageHashSchema.optional() })
+          .strict()
+          .optional(),
+        skills: z
+          .array(
+            z
+              .object({
+                skillRevisionId: runDiagnosticPackageIdentifierSchema,
+                profileRevisionId: runDiagnosticPackageIdentifierSchema,
+                state: runDiagnosticSourceStateSchema,
+              })
+              .strict(),
+          )
+          .max(50),
+      })
+      .strict(),
+    materials: z
+      .object({
+        state: runDiagnosticSourceStateSchema,
+        selected: z
+          .array(
+            z
+              .object({
+                reference: runDiagnosticPackageReferenceSchema,
+                purpose: materialPurposeSchema,
+                wasRead: z.boolean(),
+              })
+              .strict(),
+          )
+          .max(SCHEDULE_SOURCE_ITEM_MAX),
+        reads: z
+          .array(
+            z
+              .object({
+                reference: runDiagnosticPackageReferenceSchema,
+                operation: runMaterialReadOperationSchema,
+                contentHash: runDiagnosticPackageHashSchema.optional(),
+                excerptHash: runDiagnosticPackageHashSchema.optional(),
+                capturedAt: z.number().int().nonnegative(),
+                toolCallId: runDiagnosticPackageIdentifierSchema.optional(),
+              })
+              .strict(),
+          )
+          .max(10_000),
+      })
+      .strict(),
+    memory: z
+      .object({
+        state: runDiagnosticSourceStateSchema,
+        recallVersion: z
+          .union([z.literal(MEMORY_RECALL_VERSION), z.literal(MEMORY_RECALL_VERSION_V2)])
+          .optional(),
+        phase: memoryRunPhaseSchema.optional(),
+        selectedItems: z
+          .array(
+            z
+              .object({
+                memoryId: runDiagnosticPackageIdentifierSchema,
+                revisionId: runDiagnosticPackageIdentifierSchema,
+                contentHash: runDiagnosticPackageHashSchema,
+                order: z.number().int().positive(),
+                reason: memorySelectionReasonSchema,
+              })
+              .strict(),
+          )
+          .max(MEMORY_RECALL_TOTAL_ITEM_LIMIT),
+        readCount: z.number().int().nonnegative(),
+        replayCount: z.number().int().nonnegative(),
+      })
+      .strict(),
+    continuity: z
+      .object({
+        state: runDiagnosticSourceStateSchema,
+        revisionId: runDiagnosticPackageIdentifierSchema.optional(),
+        briefHash: runDiagnosticPackageHashSchema.optional(),
+        preparedAt: z.number().int().nonnegative().optional(),
+        firstProviderRequestAt: z.number().int().nonnegative().optional(),
+        omissions: taskContinuityOmissionsSchema,
+        sourceRunIds: z.array(runDiagnosticPackageIdentifierSchema).max(200),
+        artifactVersionIds: z.array(runDiagnosticPackageIdentifierSchema).max(200),
+      })
+      .strict(),
+    artifacts: z
+      .object({
+        state: runDiagnosticSourceStateSchema,
+        producedVersions: z
+          .array(
+            z
+              .object({
+                artifactId: runDiagnosticPackageIdentifierSchema,
+                versionId: runDiagnosticPackageIdentifierSchema,
+                versionNumber: z.number().int().positive(),
+                origin: z.enum(['assistant-run', 'user-edit']),
+                createdAt: z.number().int().nonnegative(),
+                contentHash: runDiagnosticPackageHashSchema.optional(),
+              })
+              .strict(),
+          )
+          .max(1_000),
+        inputRelations: z
+          .array(
+            z
+              .object({
+                outputVersionId: runDiagnosticPackageIdentifierSchema,
+                input: runDiagnosticPackageReferenceSchema,
+                relation: artifactInputRelationKindSchema,
+                createdAt: z.number().int().nonnegative(),
+              })
+              .strict(),
+          )
+          .max(10_000),
+      })
+      .strict(),
+  })
+  .strict();
+
+export const runDiagnosticPackageSchema = z
+  .object({
+    schemaVersion: z.literal(RUN_DIAGNOSTIC_PACKAGE_SCHEMA_VERSION),
+    generatedAt: z.number().int().nonnegative(),
+    applicationVersion: z
+      .string()
+      .min(1)
+      .max(64)
+      .regex(/^[A-Za-z0-9.+-]+$/u)
+      .optional(),
+    run: z
+      .object({
+        id: runDiagnosticPackageIdentifierSchema,
+        taskId: runDiagnosticPackageIdentifierSchema,
+        sessionId: runDiagnosticPackageIdentifierSchema,
+        status: runSummarySchema.shape.status,
+        createdAt: z.number().int().nonnegative(),
+        completedAt: z.number().int().nonnegative().optional(),
+      })
+      .strict(),
+    diagnostics: z
+      .object({
+        integrity: runDiagnosticsIntegritySchema,
+        summary: runDiagnosticPackageSummarySchema.optional(),
+        nodes: z.array(runDiagnosticPackageNodeSchema).max(100_000),
+      })
+      .strict(),
+    issueMark: z
+      .object({
+        category: runDiagnosticIssueMarkCategorySchema,
+        diagnosticNodeId: runDiagnosticPackageIdentifierSchema.optional(),
+      })
+      .strict()
+      .optional(),
+    sources: runDiagnosticPackageSourcesSchema,
+  })
+  .strict();
+export type RunDiagnosticPackage = z.infer<typeof runDiagnosticPackageSchema>;
+
+export const exportRunDiagnosticPackageRequestSchema = runDiagnosticsScopeRequestSchema;
+export type ExportRunDiagnosticPackageRequest = z.infer<
+  typeof exportRunDiagnosticPackageRequestSchema
+>;
+export const exportRunDiagnosticPackageResultSchema = z
+  .object({
+    cancelled: z.boolean(),
+    byteLength: z.number().int().positive().optional(),
+  })
+  .strict()
+  .superRefine((result, context) => {
+    if (result.cancelled === (result.byteLength !== undefined)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['byteLength'],
+        message: '只有已写入的诊断包返回字节数',
+      });
+    }
+  });
+export type ExportRunDiagnosticPackageResult = z.infer<
+  typeof exportRunDiagnosticPackageResultSchema
+>;
+
 const taskContinuitySourceSchema = z
   .object({
     runId: z.string().min(1),
@@ -6865,6 +7135,7 @@ export const IpcChannel = {
   ListRunDiagnosticsHistory: 'run:diagnostics-history',
   GetRunDiagnosticIssueMark: 'run:diagnostic-issue-mark:get',
   SetRunDiagnosticIssueMark: 'run:diagnostic-issue-mark:set',
+  ExportRunDiagnosticPackage: 'run:diagnostic-package:export',
   GetRunDiagnosticNodeDetail: 'run:diagnostic-node-detail',
   GetDefaultWorkspace: 'workspace:get-default',
   /** 只弹目录选择器并返回路径：选目录不等于建空间，登记走 workspace:create。 */
@@ -7039,6 +7310,9 @@ export interface BetterWorkDesktopApi {
     setDiagnosticIssueMark(
       input: SetRunDiagnosticIssueMarkRequest,
     ): Promise<RunDiagnosticIssueMark | null>;
+    exportDiagnosticPackage(
+      input: ExportRunDiagnosticPackageRequest,
+    ): Promise<ExportRunDiagnosticPackageResult>;
     getDiagnosticNodeDetail(
       input: GetRunDiagnosticNodeDetailRequest,
     ): Promise<RunDiagnosticNodeDetail | null>;

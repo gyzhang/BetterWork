@@ -292,6 +292,7 @@ describe('registerIpc', () => {
       dependencyLocksRoot: locksRoot,
       getWindow: () => null,
       getDefaultWorkspaceRoot: () => temporaryDirectory,
+      getApplicationVersion: () => '1.2.3',
     });
     fileArtifactSourcePath = path.join(temporaryDirectory, 'file-export-source.pptx');
   });
@@ -1326,6 +1327,35 @@ describe('registerIpc', () => {
       diagnosticNodeId: 'tool:ipc-tool-a',
       revision: 1,
     });
+    mocks.showSaveDialog.mockResolvedValueOnce({ canceled: true, filePath: '' });
+    await expect(invoke(IpcChannel.ExportRunDiagnosticPackage, scopeA)).resolves.toEqual({
+      cancelled: true,
+    });
+
+    const failedTarget = path.join(temporaryDirectory, 'missing-export-folder', 'diagnostics.json');
+    mocks.showSaveDialog.mockResolvedValueOnce({ canceled: false, filePath: failedTarget });
+    await expect(invoke(IpcChannel.ExportRunDiagnosticPackage, scopeA)).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
+
+    const exportTarget = path.join(temporaryDirectory, 'run-diagnostics-export.json');
+    mocks.showSaveDialog.mockResolvedValueOnce({ canceled: false, filePath: exportTarget });
+    await expect(invoke(IpcChannel.ExportRunDiagnosticPackage, scopeA)).resolves.toMatchObject({
+      cancelled: false,
+      byteLength: expect.any(Number),
+    });
+    const exportedPackage = await readFile(exportTarget, 'utf8');
+    expect(exportedPackage).toContain('ipc-diagnostics-run-a');
+    expect(exportedPackage).toContain('1.2.3');
+    expect(exportedPackage).not.toContain('synthetic prompt');
+    expect(exportedPackage).not.toContain(temporaryDirectory);
+
+    const savesBeforeWrongScope = mocks.showSaveDialog.mock.calls.length;
+    await expect(
+      invoke(IpcChannel.ExportRunDiagnosticPackage, { ...scopeA, taskId: taskB.task.id }),
+    ).rejects.toMatchObject({ name: 'RunDiagnosticPackageScopeError' });
+    expect(mocks.showSaveDialog).toHaveBeenCalledTimes(savesBeforeWrongScope);
+
     await expect(
       invoke(IpcChannel.SetRunDiagnosticIssueMark, {
         ...scopeA,
