@@ -1,9 +1,10 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { githubMcpDistribution } from '../infrastructure/github-mcp-distribution';
 import { BuiltinMcpRuntimeService } from './builtin-mcp-runtime-service';
 import type { SkillDependencyService } from './skill-dependency-service';
 
@@ -31,6 +32,60 @@ afterEach(() => {
 });
 
 describe('BuiltinMcpRuntimeService', () => {
+  it('pins the official macOS arm64 GitHub MCP distribution metadata', () => {
+    expect(githubMcpDistribution).toMatchObject({
+      version: '2.0.2',
+      fileName: 'github-mcp-server_Darwin_arm64.tar.gz',
+      license: 'MIT',
+      entryRelativePath: 'github-mcp-server',
+    });
+    expect(githubMcpDistribution.sha256).toMatch(/^[a-f0-9]{64}$/u);
+  });
+
+  it('launches GitHub with the bundled executable and forces read-only mode', async () => {
+    const githubMcpRuntimeRoot = mkdtempSync(path.join(tmpdir(), 'bw-github-mcp-test-'));
+    tempRoots.push(githubMcpRuntimeRoot);
+    const executable = path.join(githubMcpRuntimeRoot, 'github-mcp-server');
+    writeFileSync(executable, 'fixture executable');
+    chmodSync(executable, 0o755);
+    const service = new BuiltinMcpRuntimeService({
+      appRoot,
+      resourcesRoot,
+      runtimeAssetsRoot: pythonRuntimeAssetsRoot,
+      nodeRuntimeRoot: makeNodeRuntimeRoot(false),
+      githubMcpRuntimeRoot,
+      dependencies: {} as SkillDependencyService,
+    });
+
+    const launch = await service.resolve(
+      'github',
+      ['--repo', 'example/repo', '--read-only', '--read-only=false', '--', '--verbose'],
+      new AbortController().signal,
+    );
+
+    expect(launch).toEqual({
+      command: executable,
+      args: ['stdio', '--repo', 'example/repo', '--verbose', '--read-only'],
+    });
+  });
+
+  it('reports an actionable error when the bundled GitHub executable is missing', async () => {
+    const githubMcpRuntimeRoot = mkdtempSync(path.join(tmpdir(), 'bw-github-mcp-missing-'));
+    tempRoots.push(githubMcpRuntimeRoot);
+    const service = new BuiltinMcpRuntimeService({
+      appRoot,
+      resourcesRoot,
+      runtimeAssetsRoot: pythonRuntimeAssetsRoot,
+      nodeRuntimeRoot: makeNodeRuntimeRoot(false),
+      githubMcpRuntimeRoot,
+      dependencies: {} as SkillDependencyService,
+    });
+
+    await expect(service.resolve('github', [], new AbortController().signal)).rejects.toThrow(
+      'GitHub MCP 随包运行时缺失或不可执行',
+    );
+  });
+
   it('falls back to the Electron executable when no managed Node runtime is bundled', async () => {
     const service = new BuiltinMcpRuntimeService({
       appRoot,

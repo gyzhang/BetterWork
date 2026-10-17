@@ -93,6 +93,15 @@ AI 已打开回看本轮窄窗深色保存失败、宽窗浅色授权确认与�
 - Node MCP：由打包 `.app` 的 Electron 可执行文件运行内置 Node server，并通过打包后的 `skill-guardian.js` 握手；子进程 `PATH=/usr/bin:/bin`，不调用系统 Node/npm/npx。MCP `tools/list` 分别返回 filesystem 14、memory 9、sequential-thinking 1 个工具。
 - Python fetch：提取随包 CPython，版本为 3.12.14；在 `PIP_NO_INDEX=1`、`--no-index` 下仅用安装包内 43 个锁定 wheels 建 venv，`python -m mcp_server_fetch` 经打包 guardian 握手并列出 fetch 工具。没有调用抓取工具，不产生外部网页请求。
 - PPT Python：同一随包 CPython 使用另一 venv；`PIP_NO_INDEX=1` 下从安装包现有 PPT wheelhouse 安装锁内 8 个制品，并成功导入 `pptx`、`lxml`、`yaml`、`PIL`、`xlsxwriter`。验证了该 Python 运行时可由共享依赖服务供 Skill 环境使用，同时与 fetch venv 隔离。
+
 - 自动化：`npm run lint`、`npm run format:check`、`npm run typecheck` 均退出 0；`npm run docs:check` 154 项通过；六个功能测试文件 139 项、两个重档文件 44 项通过；`npm run ui:check -- --mcp-only` 8 组通过。首轮 docs:check 报一个新测试直接写取消错误名称，已改用 `isAbortError` 后重跑通过。
 - 边界：上述是无签名 arm64 unpacked 包和合成/离线环境证据；尚未做 Developer ID 签名、Gatekeeper 安装、干净用户目录首次安装、真实产品窗口及真实业务 MCP 验收。没有改用户 SQLite、用户 MCP 连接或授权。
 - 状态：CF43 的协议、实现、自动化和离线包级技术路径已通过；整体卡保持 partial，等待签名安装与用户窗口验收，不提升 CF33/CF42。
+
+## 2026-10-17 GitHub MCP 内置接入（等待用户实测）
+
+- 用户选定继续保留四项现有内置 MCP，并加入 GitHub 官方 MCP；技术边界见 [ADR-0052](../adr/0052-bundled-github-mcp.md)。
+- GitHub 官方 v2.0.2 `Darwin_arm64` release 归档已下载检查；SHA-256 与官方 release 元数据一致：`5d9b38511bffc84d2272eb6189129eb721c8900e45784d8ea7eaf25f8d3dd835`。归档内容含 `github-mcp-server`、README 和 MIT LICENSE。
+- 分支新增运行时锁、SHA 校验与资源准备脚本，设置中新增 GitHub 内置入口；Main 使用受保护的 `GITHUB_PERSONAL_ACCESS_TOKEN`，服务参数强制 `--read-only`。
+- 未运行服务程序、未构建安装包、未启动 BetterWork、未配置用户 Token、未发现或调用 GitHub 工具、未执行 MCP 功能测试。文档结构护栏 156 项通过，TypeScript typecheck、定向 ESLint 与 Prettier 通过。代码接入不构成真实账号/桌面验收，CF33 和 CF43 保持 `partial`。
+- 用户测试入口与步骤见[首批内置 MCP 与真实验收](../reviews/2026-10-17-mcp-candidate-selection.md)。

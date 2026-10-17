@@ -77,6 +77,77 @@ const context = (runId: string, signal = new AbortController().signal) => ({
 });
 
 describe('McpClientService', () => {
+  it.each([false, true])(
+    'rejects a GitHub connection before runtime resolution when its token is not configured (secret mapping: %s)',
+    async (secret) => {
+      const store = AppStore.open(':memory:');
+      stores.push(store);
+      const resolveBundledRuntime = vi.fn(async () => ({ command: process.execPath, args: [] }));
+      const service = new McpClientService(store, { resolveBundledRuntime });
+      services.push(service);
+      const connection = await service.saveConnection({
+        name: 'GitHub token gate fixture',
+        transport: {
+          kind: 'stdio',
+          runtime: { kind: 'bundled', serverId: 'github' },
+          args: [],
+          env: [
+            {
+              name: 'GITHUB_PERSONAL_ACCESS_TOKEN',
+              ...(secret ? { secret: true } : { value: 'synthetic-token', secret: false }),
+            },
+          ],
+        },
+      });
+
+      await expect(service.testConnection(connection.id)).rejects.toThrow(
+        'GitHub MCP 需要机密环境变量 GITHUB_PERSONAL_ACCESS_TOKEN',
+      );
+      expect(resolveBundledRuntime).not.toHaveBeenCalled();
+    },
+  );
+
+  it('resolves the configured GitHub token from protected storage before starting its runtime', async () => {
+    const adapter: SafeStorageAdapter = {
+      isAvailableAsync: async () => true,
+      encryptAsync: async (value) => Buffer.from(value),
+      decryptAsync: async (value) => value.toString(),
+    };
+    const store = AppStore.open(':memory:', adapter);
+    stores.push(store);
+    const resolveBundledRuntime = vi.fn(async (_serverId: string, args: readonly string[]) => ({
+      command: process.execPath,
+      args: [fixturePath, ...args],
+    }));
+    const service = new McpClientService(store, { resolveBundledRuntime });
+    services.push(service);
+    const connection = await service.saveConnection({
+      name: 'GitHub protected token fixture',
+      transport: {
+        kind: 'stdio',
+        runtime: { kind: 'bundled', serverId: 'github' },
+        args: [],
+        env: [{ name: 'GITHUB_PERSONAL_ACCESS_TOKEN', secret: true }],
+      },
+      secrets: [
+        {
+          slot: 'env:GITHUB_PERSONAL_ACCESS_TOKEN',
+          expectedVersion: 0,
+          mutation: { action: 'replace', value: 'synthetic-token' },
+        },
+      ],
+    });
+
+    const result = await service.testConnection(connection.id);
+
+    expect(result.tools).toHaveLength(1);
+    expect(resolveBundledRuntime).toHaveBeenCalledExactlyOnceWith(
+      'github',
+      [],
+      expect.any(AbortSignal),
+    );
+  });
+
   it('joins pending credential persistence before storage closes', async () => {
     let release!: () => void;
     const gate = new Promise<void>((resolve) => {

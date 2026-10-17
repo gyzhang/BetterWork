@@ -11,6 +11,7 @@
 > 2026-10-08 MCP 专项：用户确认 [ADR-0043](../adr/0043-mcp-multi-transport-and-oauth.md) 的推荐方案并授权编码，CF30–CF32/CF40–CF41 按已实现 CF10/CF11 底座推进，不前置开发百度 profile。CF12/CF33/CF42 的人工或真实服务验收保持独立；下文旧卡的仅静态认证、排除 SSE/OAuth、自动重建并重放会话及自行运行完整 verify 等条款由 ADR-0043 与 ADR-0042 替代。
 > 2026-10-09 内置 MCP 运行时：用户明确要求安装包内置运行时、减少用户安装 Node/Python 和冷启动联网；[ADR-0045](../adr/0045-bundled-runtimes-for-local-mcp.md) Accepted。新增 CF43；真实业务与签名安装验收仍按 CF33/CF42/CF51 边界记录。
 > 2026-10-11 Node 运行时与 Skill 执行链：[ADR-0047](../adr/0047-bundled-node-runtime.md) Accepted，随包独立 Node.js 24.x 与 MCP 接入（决策 1–4、8–11）已在任务分支落地待验收；Node-based Skill 执行链、node_modules 落点与信任指纹（决策 5/6/7）因运行链路 Python-centric 且暂无 Node Skill 消费者，新增 CF44 承载，待首个真实 Node Skill 出现再按实际契约开工，不提前建投机抽象。
+> 2026-10-17 内置 MCP 首批用户选择：继续包含 `filesystem`、`memory`、`sequential-thinking`、`fetch`，并将 GitHub 官方 MCP 加入 CF43；[ADR-0052](../adr/0052-bundled-github-mcp.md) 记录锁版、只读启动与机密 Token 边界。代码接入不代表真实账号验收，CF33/CF43 仍待用户实测。
 
 ## 1. 交付顺序与完成口径
 
@@ -58,11 +59,11 @@ CF00 不重复此前已证实且未受变更影响的测试；以最新提交、
 | CF30 | MCP 连接身份/修订与凭据 env 绑定 | CF10/CF11 实现 | doing | v45 保留旧连接/专家/任务/Run/Evidence/成果；配置与所有者凭据原子 CAS、移除清密钥；迁移/仓储/凭据回归通过。待真实存储与用户窗口验收；[完整证据](../acceptance/2026-10-09-mcp-connections.md) |
 | CF31 | 工具 contract hash 与审阅记录 | CF30 | doing | 确定性合同 hash、修订内审阅、写/破坏工具禁选、执行前重发现、变更阻断与绑定选择已落地；合同/服务/页面回归通过。待用户审阅操作验收；[完整证据](../acceptance/2026-10-09-mcp-connections.md) |
 | CF32 | Per-Run MCP 客户端与取消收口 | CF31 | doing | Run-owned client、测试隔离、旧检测不覆盖新目录、模型前取消终态、guardian 探测/子孙清理与实际绑定 Evidence 已落地；离线回归通过。待真实业务取消/重启验收；[完整证据](../acceptance/2026-10-09-mcp-connections.md) |
-| CF33 | M3 里程碑与真实业务 MCP 接入 | CF32 | partial | 真实业务 stdio server 尚未提供；保持未验收，不代签 E55。离线夹具见本轮证据；[完整证据](../acceptance/2026-10-09-mcp-connections.md) |
+| CF33 | M3 里程碑与真实业务 MCP 接入 | CF32 | partial | GitHub 官方 stdio server 已加入内置清单；真实账号 Token、用户审阅与业务工具 Run 尚未测试，保持 partial，不代签 E55；[验收记录](../acceptance/2026-10-09-mcp-connections.md) |
 | CF40 | 三种传输与目的地校验 | CF32 实现 | doing | 三种传输、DNS socket pinning、目的地隔离、JSON/SSE 限额、仅握手 404/405 显式回退已落地；HTTP/网络策略回归通过。待真实端点验收；[完整证据](../acceptance/2026-10-09-mcp-connections.md) |
 | CF41 | 版本协商、OAuth 与运行时限制 | CF40 | doing | SDK auto/legacy、PKCE/state/issuer/resource、预注册/CIMD/DCR、refresh 合并/CAS、登录取消/监听器清理、设置与通知已落地；OAuth/运行时/页面回归通过。待真实账号与 Keychain 重启验收；[完整证据](../acceptance/2026-10-09-mcp-connections.md) |
 | CF42 | M4 里程碑与远程 MCP 端到端 | CF41 | partial | 真实 HTTP/SSE/OAuth 账号尚未提供；保持未验收，不提升 ADR-0025 或关闭 M4；ADR-0043 已接受只代表方案已定案；[完整证据](../acceptance/2026-10-09-mcp-connections.md) |
-| CF43 | 内置 stdio MCP 与随包运行时 | CF32 | partial | ADR-0045 Accepted；三个 Node MCP 与 Python fetch 通过随包 guardian 握手；打包 CPython、fetch wheelhouse 与现有 PPT wheelhouse 均完成离线环境准备。未签名 unpacked 包验证通过；Developer ID 安装态及用户窗口验收待后续窗口；[证据](../acceptance/2026-10-09-mcp-connections.md#2026-10-09-内置-mcp-运行时离线打包验收) |
+| CF43 | 内置 stdio MCP 与随包运行时 | CF32 | partial | ADR-0045 Accepted；用户于 2026-10-17 选择 GitHub 作为第五项内置 MCP。新增官方 v2.0.2 Darwin arm64 发行包锁、SHA 校验准备脚本、只读启动和加密 PAT 配置；代码与用户真实账号测试尚未验收。既有四项的打包/离线握手证据见[验收记录](../acceptance/2026-10-09-mcp-connections.md#2026-10-09-内置-mcp-运行时离线打包验收)，GitHub 待补用户测试。 |
 | CF44 | Node-based Skill 执行链与依赖落点 | CF43；首个真实 Node Skill | todo | 待补（ADR-0047 决策 5/6/7；无消费者前不开工，避免投机抽象） |
 | CF50 | 跨类迁移回归与用户走查脚本 | CF42, CF43 | todo | 待补 |
 | CF51 | M5 里程碑、ADR Accepted 与整体收尾 | CF50 | todo | 待补 |
@@ -307,12 +308,12 @@ CF00 不重复此前已证实且未受变更影响的测试；以最新提交、
 
 ### CF43 内置 stdio MCP 与随包运行时
 
-- 依据：[ADR-0045](../adr/0045-bundled-runtimes-for-local-mcp.md)、[MCP 连接设计](../designs/mcp-connections.md)、[capability-contracts §3.1](capability-contracts.md)。
+- 依据：[ADR-0045](../adr/0045-bundled-runtimes-for-local-mcp.md)、[ADR-0052](../adr/0052-bundled-github-mcp.md)、[MCP 连接设计](../designs/mcp-connections.md)、[capability-contracts §3.1](capability-contracts.md)。
 - 目标：干净 macOS arm64 安装不要求用户预装 Node.js、npm/npx、Python、uv/uvx；优先使用随安装包资源，缺少资源时才使用登记的固定地址并校验 SHA-256。
-- 范围：filesystem、memory、sequential-thinking 三个锁版 Node server 与 mcp-server-fetch Python server；自定义 stdio 命令不变。现有可精确识别配置由 v46 新 revision 迁移，旧 revision、连接身份和历史保留，工具审阅不继承。
+- 范围：filesystem、memory、sequential-thinking 三个锁版 Node server、mcp-server-fetch Python server、GitHub 官方 v2.0.2 Darwin arm64 可执行文件；自定义 stdio 命令不变。v46 迁移只识别四个已有服务，不猜测或改写用户自定义 GitHub 命令。
 - Python：CPython 3.12.14 macOS arm64 制品、PPT Skill wheelhouse 与 fetch 依赖闭包随包；SkillDependencyService 共享基础解释器，各锁仍生成独立受管 venv；进度、取消与失败原因可见。
-- 验收：schema/迁移/service/guardian 回归；分别在 PATH 不含 Node/Python 的宿主启动四项内置服务；CPython、wheels 与 Node package 资源确实出现在 unpacked/安装包；断网准备成功；损坏哈希拒绝执行；取消后无孤儿进程/半成品环境；不自动启用连接或授权工具。真实业务服务、签名安装与用户窗口结果继续分开记录。
-- 状态：partial；代码、自动化、未签名 unpacked 包、受管 guardian 与禁网环境离线握手已验证；Developer ID 签名安装与人工首装验收仍待后续窗口。
+- 验收：schema/service/guardian 回归；PATH 不含 Node/Python 的宿主启动既有四项服务，GitHub 用随包原生二进制启动；CPython、wheels、Node package、GitHub 二进制与 MIT 许可证出现在 unpacked/安装包；哈希失配拒绝执行；取消后无孤儿进程/半成品环境；不自动启用连接或授权工具。GitHub 的只读工具列表、PAT 保护与真实 Run 由用户测试；Developer ID 签名安装和 CF33 真实业务验收另行记录。
+- 状态：partial；既有四项的代码、自动化、未签名 unpacked 包、受管 guardian 与禁网环境离线握手已验证。GitHub 接入代码完成但未运行 MCP、未配置真实 Token、未做用户窗口验收；签名安装仍待后续窗口。
 
 ### CF44 Node-based Skill 执行链与依赖落点
 

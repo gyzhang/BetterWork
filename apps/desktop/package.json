@@ -11,7 +11,8 @@
     "dist": "npm run dist:mac",
     "python:runtimes:prepare": "node ../../scripts/prepare-python-runtime-assets.mjs",
     "node:runtimes:prepare": "node ../../scripts/prepare-node-runtime-assets.mjs",
-    "runtimes:prepare": "npm run python:runtimes:prepare && npm run node:runtimes:prepare",
+    "github:mcp:prepare": "node ../../scripts/prepare-github-mcp-runtime.mjs",
+    "runtimes:prepare": "npm run python:runtimes:prepare && npm run node:runtimes:prepare && npm run github:mcp:prepare",
     "dist:mac": "node ../../scripts/sync-product-version.mjs && npm run runtimes:prepare && electron-vite build && electron-builder --mac --arm64"
   },
   "dependencies": {

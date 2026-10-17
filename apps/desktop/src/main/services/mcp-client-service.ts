@@ -644,6 +644,19 @@ export class McpClientService {
   private async connect(connection: McpConnectionSummary, signal: AbortSignal): Promise<Connected> {
     const lifetimeSignal = signal;
     const config = connection.transport;
+    if (config.kind === 'stdio' && config.runtime?.serverId === 'github') {
+      const tokenSlot = 'env:GITHUB_PERSONAL_ACCESS_TOKEN';
+      const tokenVariableIsSecret = config.env?.some(
+        (item) => item.name === 'GITHUB_PERSONAL_ACCESS_TOKEN' && item.secret,
+      );
+      const tokenIsConfigured = connection.credentialSlots?.some(
+        (item) => item.slot === tokenSlot && item.configured,
+      );
+      if (!tokenVariableIsSecret || !tokenIsConfigured)
+        throw new McpClientError(
+          'GitHub MCP 需要机密环境变量 GITHUB_PERSONAL_ACCESS_TOKEN。请添加具有目标仓库只读权限的 GitHub Token。',
+        );
+    }
     const connectionTimeoutMs = config.kind === 'stdio' ? 60_000 : 10_000;
     const timeoutMessage =
       config.kind === 'stdio'

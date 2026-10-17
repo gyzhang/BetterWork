@@ -448,6 +448,94 @@ describe('MCP configuration and secret mutation forms', () => {
     },
   );
 
+  it('moves a legacy GitHub token environment value into the protected token slot', async () => {
+    const model = state();
+    render(<McpSettings state={model} />);
+    fireEvent.click(screen.getByRole('button', { name: '新建连接' }));
+    fill('名称', 'GitHub');
+    fireEvent.click(screen.getByText('环境变量'));
+    fill('普通环境变量（每行 NAME=value）', 'GITHUB_PERSONAL_ACCESS_TOKEN=synthetic-token');
+    choose('服务来源', '内置 · GitHub（只读）');
+
+    expect(
+      screen.getByText(
+        'GitHub MCP 仅开放只读工具。请在下方机密环境变量中保存仅对目标仓库有读取权限的 GitHub Token；连接检测不会调用 GitHub 业务工具。',
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByLabelText<HTMLInputElement>('GITHUB_PERSONAL_ACCESS_TOKEN 的新值').value,
+    ).toBe('synthetic-token');
+    expect(
+      screen.getByLabelText<HTMLTextAreaElement>('普通环境变量（每行 NAME=value）').value,
+    ).toBe('');
+    fireEvent.click(screen.getByRole('button', { name: '保存' }));
+
+    await waitFor(() =>
+      expect(model.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'GitHub',
+          transport: {
+            kind: 'stdio',
+            runtime: { kind: 'bundled', serverId: 'github' },
+            args: [],
+            env: [{ name: 'GITHUB_PERSONAL_ACCESS_TOKEN', secret: true }],
+          },
+          secrets: [
+            {
+              slot: 'env:GITHUB_PERSONAL_ACCESS_TOKEN',
+              expectedVersion: 0,
+              mutation: { action: 'replace', value: 'synthetic-token' },
+            },
+          ],
+        }),
+      ),
+    );
+  });
+
+  it('keeps an existing GitHub secret mapping write-only when editing', async () => {
+    const githubConnection: McpConnectionSummary = {
+      ...connection,
+      name: 'GitHub',
+      credentialSlots: [{ slot: 'env:GITHUB_PERSONAL_ACCESS_TOKEN', configured: true, version: 2 }],
+      transport: {
+        kind: 'stdio',
+        runtime: { kind: 'bundled', serverId: 'github' },
+        args: [],
+        env: [{ name: 'GITHUB_PERSONAL_ACCESS_TOKEN', secret: true }],
+      },
+    };
+    const model = state([githubConnection]);
+    render(<McpSettings state={model} />);
+    expect(screen.getByText(/内置 · GitHub（只读）/u)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '编辑' }));
+    const token = screen.getByLabelText<HTMLInputElement>('GITHUB_PERSONAL_ACCESS_TOKEN 的新值');
+    expect(token.value).toBe('');
+    expect(screen.getByText(/GitHub Token 由算台加密保存/u)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '保存' }));
+
+    await waitFor(() =>
+      expect(model.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: githubConnection.id,
+          expectedRevisionId: githubConnection.revisionId,
+          transport: {
+            kind: 'stdio',
+            runtime: { kind: 'bundled', serverId: 'github' },
+            args: [],
+            env: [{ name: 'GITHUB_PERSONAL_ACCESS_TOKEN', secret: true }],
+          },
+          secrets: [
+            {
+              slot: 'env:GITHUB_PERSONAL_ACCESS_TOKEN',
+              expectedVersion: 2,
+              mutation: { action: 'keep' },
+            },
+          ],
+        }),
+      ),
+    );
+  });
+
   it.each(['replace', 'clear'] as const)(
     'writes a %s HTTP token mutation against the stored version',
     async (action) => {
