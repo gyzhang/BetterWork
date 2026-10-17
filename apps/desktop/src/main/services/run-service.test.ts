@@ -5548,7 +5548,7 @@ describe('AT10 离线跨层执行追踪', () => {
         pageSize: 20,
       });
       expect(completedPage).toMatchObject({
-        integrity: 'complete',
+        integrity: 'partial',
         summary: {
           status: 'completed',
           modelCallCount: 2,
@@ -5583,14 +5583,14 @@ describe('AT10 离线跨层执行追踪', () => {
       expect(completedPage).not.toHaveProperty('prompt');
       expect(fixture.store.runDiagnostics.getSummary(failedRunId)).toMatchObject({
         status: 'failed',
-        integrity: 'complete',
+        integrity: 'partial',
       });
       expect(fixture.store.runDiagnostics.getPage({ runId: failedRunId })?.nodes).toContainEqual(
         expect.objectContaining({ kind: 'model', status: 'failed' }),
       );
       expect(fixture.store.runDiagnostics.getSummary(cancelledRunId)).toMatchObject({
         status: 'cancelled',
-        integrity: 'complete',
+        integrity: 'partial',
       });
       expect(fixture.store.runDiagnostics.getPage({ runId: cancelledRunId })?.nodes).toContainEqual(
         expect.objectContaining({ kind: 'model', status: 'cancelled' }),

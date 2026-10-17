@@ -37,7 +37,7 @@
 | AT08 | 执行链详情领域组件 | AT07 | M1 | done | 602dc92f；placeholder 最小行为反例红 7 项；定向 10 项绿；check:quick 最终退出 0（lint/format/typecheck/docs:check 156、functional 197/3174、动态消费者 277、heavy 5 文件/210；覆盖 587/625=93.92%）；迁移 v47 |
 | AT09 | 工作页当前/历史 Run 详情入口 | AT08 | M1 | done | 当前/历史 scoped 入口、切 Task/收起面板不取消 Run；ContextPanel 33 项、快检含 App heavy 通过；覆盖 604/643=93.93%，迁移 v47 |
 | AT10 | 第 1 期离线跨层回归 | AT09 | M1 | done | RunService＋临时文件 SQLite 重装配 red→green；IPC/Preload/Hook/React 合约 446 项通过；初始 check:quick 退出 0（functional 197/3175、动态 277、heavy 211；覆盖 605/643=94.09%）；同步最新 main 后保留模型角色 v47、诊断元数据迁移为 v48；整合 check:quick 退出 0（functional 196/3157、动态 278、heavy 212；覆盖 605/643=94.09%）；ExpertsView 焦点竞态测试改用 waitFor；PR #214 head 70158c0d 的 Code lint、Quick code check、PR Gate 均通过并于 2026-10-17 squash 合并为 1d94b898；完整验证及真实 UI/模型/性能/安装未验，ADR-0050 仍 Proposed，AT11–AT25 不在本次范围 |
-| AT11 | 宿主事实流迁移与记录器 | AT10 | M2 | todo | 未开工 |
+| AT11 | 宿主事实流迁移与记录器 | AT10 | M2 | done | 起点/当前 HEAD `05f4d8b3`；迁移 v49。严格宿主事件 Schema、独立序号仓储与注入时钟记录器；旧 Run 不回填，新 Run 的 host 记录尚未投影时摘要为 partial。Schema/迁移/仓储反例红跑退出 1，四文件定向绿跑 140 项通过；状态摘要完整性反例另红 1 项后转绿；AT10 RunService 跨层旧预期改为 partial，heavy 定向 1 项通过。最终 `npm run check:quick -- --base 05f4d8b3` 退出 0：docs:check 156、functional 195 文件/3159 项、动态 2 文件/280 项、heavy 6 文件/212 项；覆盖 93/108=86.11%。UI/模型/性能/安装未验，详见 2026-10-17 日志 |
 | AT12 | Run 准备、审计、清理、提交观测 | AT11 | M2 | todo | 未开工 |
 | AT13 | Skill 宿主阶段与执行关联 | AT12 | M2 | todo | 未开工 |
 | AT14 | 精确工作依据联查 | AT13 | M2 | todo | 未开工 |

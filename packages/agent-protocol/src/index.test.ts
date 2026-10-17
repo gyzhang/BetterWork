@@ -14,6 +14,7 @@ import {
   expertReferenceMaterialSchema,
   exportMarkdownArtifactRequestSchema,
   facetToKind,
+  hostDiagnosticEventSchema,
   importSkillRequestSchema,
   jobResultSchema,
   jobSpecSchema,
@@ -2476,4 +2477,35 @@ describe('MI 运行快照 v1/v2 兼容与优先预算字面量', () => {
       }).success,
     ).toBe(false);
   });
+});
+
+it('validates strict host diagnostic event variants and rejects unbounded data', () => {
+  const event = {
+    id: 'host-event-1',
+    runId: 'run-1',
+    operationId: 'operation-1',
+    diagnosticSequence: 0,
+    createdAt: 10,
+    kind: 'run-host',
+    phase: 'prepare',
+    state: 'started',
+    metadata: { outputBytes: 12, outputTruncated: true, result: 'success' },
+  } as const;
+
+  expect(hostDiagnosticEventSchema.safeParse(event).success).toBe(true);
+  expect(hostDiagnosticEventSchema.safeParse({ ...event, phase: 'execute' }).success).toBe(false);
+  expect(
+    hostDiagnosticEventSchema.safeParse({ ...event, metadata: { path: '/private/file' } }).success,
+  ).toBe(false);
+  expect(
+    hostDiagnosticEventSchema.safeParse({ ...event, metadata: { outputTruncated: 'yes' } }).success,
+  ).toBe(false);
+  expect(hostDiagnosticEventSchema.safeParse({ ...event, argv: ['secret'] }).success).toBe(false);
+  expect(
+    hostDiagnosticEventSchema.safeParse({
+      ...event,
+      kind: 'skill-host',
+      phase: 'dispatch',
+    }).success,
+  ).toBe(true);
 });

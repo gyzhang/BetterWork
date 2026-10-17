@@ -113,7 +113,7 @@ it('adds nullable diagnostics recording metadata in v48 and preserves unmarked l
   migrate(db, { migrations: appMigrations.filter((migration) => migration.version <= 47) });
   seedRunRow(db);
 
-  migrate(db, { migrations: appMigrations });
+  migrate(db, { migrations: appMigrations.filter((migration) => migration.version <= 48) });
 
   expect(readSchemaVersion(db)).toBe(48);
   expect(
@@ -129,6 +129,55 @@ it('adds nullable diagnostics recording metadata in v48 and preserves unmarked l
     diagnostics_sections_json: null,
   });
   expect(db.pragma('foreign_key_check')).toEqual([]);
+  db.close();
+});
+
+it('adds the host diagnostic fact stream in v49 and cascades it with its Run', () => {
+  const db = new Database(':memory:');
+  db.pragma('foreign_keys = ON');
+  migrate(db, { migrations: appMigrations.filter((migration) => migration.version <= 48) });
+  seedRunRow(db);
+
+  migrate(db, { migrations: appMigrations });
+
+  expect(readSchemaVersion(db)).toBe(49);
+  expect(hasTable(db, 'run_diagnostic_events')).toBe(true);
+  db.prepare(
+    `INSERT INTO run_diagnostic_events
+       (id, run_id, operation_id, diagnostic_sequence, kind, phase, state, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run('host-event-1', 'trace-run', 'operation-1', 0, 'run-host', 'prepare', 'started', 10);
+  expect(
+    db
+      .prepare('SELECT diagnostic_sequence FROM run_diagnostic_events WHERE run_id = ?')
+      .all('trace-run'),
+  ).toEqual([{ diagnostic_sequence: 0 }]);
+  expect(() =>
+    db
+      .prepare(
+        `INSERT INTO run_diagnostic_events
+         (id, run_id, operation_id, diagnostic_sequence, kind, phase, state, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run('host-event-2', 'trace-run', 'operation-2', 0, 'run-host', 'prepare', 'started', 11),
+  ).toThrow();
+  db.prepare('DELETE FROM runs WHERE id = ?').run('trace-run');
+  expect(db.prepare('SELECT COUNT(*) AS count FROM run_diagnostic_events').get()).toEqual({
+    count: 0,
+  });
+  expect(db.pragma('foreign_key_check')).toEqual([]);
+  db.close();
+});
+
+it('rolls back the host diagnostic migration when its table already exists', () => {
+  const db = new Database(':memory:');
+  migrate(db, { migrations: appMigrations.filter((migration) => migration.version <= 48) });
+  db.exec('CREATE TABLE run_diagnostic_events (id TEXT PRIMARY KEY)');
+
+  expect(() => migrate(db, { migrations: appMigrations })).toThrow(/already exists/iu);
+
+  expect(readSchemaVersion(db)).toBe(48);
+  expect(hasColumn(db, 'runs', 'diagnostics_recording_version')).toBe(true);
   db.close();
 });
 
@@ -347,7 +396,7 @@ describe('application database migrations', () => {
 
     migrate(db, { migrations: appMigrations });
 
-    expect(readSchemaVersion(db)).toBe(48);
+    expect(readSchemaVersion(db)).toBe(49);
     expect(
       db
         .prepare('SELECT profile_id, role, priority FROM model_profile_roles ORDER BY profile_id')
@@ -2832,8 +2881,8 @@ describe('scheduled task schema v36-v38 (SC03-2 / SC04-4 / SC06-4)', () => {
   it('creates all eight tables and required indexes on an empty database, then stays idempotent', () => {
     const db = new Database(':memory:');
     migrate(db, { migrations: appMigrations });
-    expect(readSchemaVersion(db)).toBe(48);
-    expect(appMigrations.at(-1)?.version).toBe(48);
+    expect(readSchemaVersion(db)).toBe(49);
+    expect(appMigrations.at(-1)?.version).toBe(49);
     for (const table of SCHEDULE_TABLES) expect(hasTable(db, table), table).toBe(true);
     const indexes = (
       db.prepare("SELECT name FROM sqlite_master WHERE type = 'index'").all() as Array<{
@@ -2858,7 +2907,7 @@ describe('scheduled task schema v36-v38 (SC03-2 / SC04-4 / SC06-4)', () => {
     );
     expect(db.pragma('foreign_key_check')).toEqual([]);
     migrate(db, { migrations: appMigrations });
-    expect(readSchemaVersion(db)).toBe(48);
+    expect(readSchemaVersion(db)).toBe(49);
     expect(
       db.prepare('SELECT COUNT(*) AS count FROM schema_migrations WHERE version = 37').get(),
     ).toEqual({ count: 1 });
@@ -2880,7 +2929,7 @@ describe('scheduled task schema v36-v38 (SC03-2 / SC04-4 / SC06-4)', () => {
     expect(readSchemaVersion(db)).toBe(35);
     expect(hasTable(db, 'schedules')).toBe(false);
     migrate(db, { migrations: appMigrations });
-    expect(readSchemaVersion(db)).toBe(48);
+    expect(readSchemaVersion(db)).toBe(49);
     expect(db.prepare('SELECT id, workspace_id FROM tasks WHERE id = ?').get('task-1')).toEqual({
       id: 'task-1',
       workspace_id: 'ws-1',
@@ -2899,7 +2948,7 @@ describe('scheduled task schema v36-v38 (SC03-2 / SC04-4 / SC06-4)', () => {
     ).toEqual({ id: 'version-1', artifact_id: 'artifact-1', content: '# 合成成果' });
     expect(countRows(db, 'schedules')).toBe(0);
     migrate(db, { migrations: appMigrations });
-    expect(readSchemaVersion(db)).toBe(48);
+    expect(readSchemaVersion(db)).toBe(49);
     expect(db.pragma('foreign_key_check')).toEqual([]);
     db.close();
   });
@@ -3172,7 +3221,7 @@ describe('scheduled task schema v36-v38 (SC03-2 / SC04-4 / SC06-4)', () => {
     });
     expect(db.pragma('foreign_key_check')).toEqual([]);
     migrate(db, { migrations: appMigrations });
-    expect(readSchemaVersion(db)).toBe(48);
+    expect(readSchemaVersion(db)).toBe(49);
     db.close();
   });
 
@@ -3196,7 +3245,7 @@ describe('scheduled task schema v36-v38 (SC03-2 / SC04-4 / SC06-4)', () => {
 
     db.exec('DROP TABLE migration_collision');
     migrate(db, { migrations: appMigrations });
-    expect(readSchemaVersion(db)).toBe(48);
+    expect(readSchemaVersion(db)).toBe(49);
     expect(
       db
         .prepare(
@@ -3238,7 +3287,7 @@ describe('Task Continuity schema migration v39 (TC01)', () => {
     before.close();
 
     const firstOpen = openAppDatabase(filePath);
-    expect(readSchemaVersion(firstOpen)).toBe(48);
+    expect(readSchemaVersion(firstOpen)).toBe(49);
     expect(hasTable(firstOpen, 'task_continuity_revisions')).toBe(true);
     expect(hasTable(firstOpen, 'run_continuity_contexts')).toBe(true);
     expect(
@@ -3254,7 +3303,7 @@ describe('Task Continuity schema migration v39 (TC01)', () => {
     firstOpen.close();
 
     const secondOpen = openAppDatabase(filePath);
-    expect(readSchemaVersion(secondOpen)).toBe(48);
+    expect(readSchemaVersion(secondOpen)).toBe(49);
     expect(countRows(secondOpen, 'task_continuity_revisions')).toBe(0);
     expect(countRows(secondOpen, 'run_continuity_contexts')).toBe(0);
     secondOpen.close();
@@ -3284,7 +3333,7 @@ describe('Task Continuity schema migration v39 (TC01)', () => {
 
     db.exec('DROP TABLE migration_collision');
     migrate(db, { migrations: appMigrations });
-    expect(readSchemaVersion(db)).toBe(48);
+    expect(readSchemaVersion(db)).toBe(49);
     expect(hasTable(db, 'task_continuity_revisions')).toBe(true);
     expect(hasTable(db, 'run_continuity_contexts')).toBe(true);
     expect(db.pragma('foreign_key_check')).toEqual([]);
@@ -3311,7 +3360,7 @@ describe('Task Continuity Run snapshot migration v40 (TC02)', () => {
 
     db.exec('DROP TRIGGER run_continuity_contexts_only_mark_first_provider_request');
     migrate(db, { migrations: appMigrations });
-    expect(readSchemaVersion(db)).toBe(48);
+    expect(readSchemaVersion(db)).toBe(49);
     expect(hasColumn(db, 'run_continuity_contexts', 'omissions_json')).toBe(true);
     expect(
       db
@@ -3322,7 +3371,7 @@ describe('Task Continuity Run snapshot migration v40 (TC02)', () => {
     ).toEqual({ name: 'run_continuity_contexts_only_mark_first_provider_request' });
     expect(db.pragma('foreign_key_check')).toEqual([]);
     migrate(db, { migrations: appMigrations });
-    expect(readSchemaVersion(db)).toBe(48);
+    expect(readSchemaVersion(db)).toBe(49);
     db.close();
   });
 });
@@ -3344,7 +3393,7 @@ describe('Skill publisher package identity migration v41', () => {
 
     migrate(db, { migrations: appMigrations });
 
-    expect(readSchemaVersion(db)).toBe(48);
+    expect(readSchemaVersion(db)).toBe(49);
     expect(hasColumn(db, 'skill_revisions', 'package_id')).toBe(true);
     expect(
       db.prepare('SELECT id, package_id FROM skill_revisions WHERE id = ?').get('revision-1'),
@@ -3371,7 +3420,7 @@ describe('builtin availability settings migration v43', () => {
 
     migrate(db, { migrations: appMigrations });
 
-    expect(readSchemaVersion(db)).toBe(48);
+    expect(readSchemaVersion(db)).toBe(49);
     expect(
       db
         .prepare(

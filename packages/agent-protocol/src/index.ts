@@ -4624,7 +4624,7 @@ export const runSummarySchema = z.object({
   bindings: z.array(runSkillBindingSummarySchema).optional(),
 });
 
-export const runDiagnosticsSectionSchema = z.enum(['core']);
+export const runDiagnosticsSectionSchema = z.enum(['core', 'host']);
 export type RunDiagnosticsSection = z.infer<typeof runDiagnosticsSectionSchema>;
 
 export const runDiagnosticsRecordingSchema = z
@@ -4639,9 +4639,108 @@ export const runDiagnosticsRecordingSchema = z
   .strict();
 export type RunDiagnosticsRecording = z.infer<typeof runDiagnosticsRecordingSchema>;
 export const CURRENT_RUN_DIAGNOSTICS_RECORDING = {
-  version: 1,
-  sections: ['core'],
+  version: 2,
+  sections: ['core', 'host'],
 } as const satisfies RunDiagnosticsRecording;
+
+export const runHostDiagnosticPhaseSchema = z.enum([
+  'prepare',
+  'audit',
+  'skill-cleanup',
+  'mcp-cleanup',
+  'artifact-commit',
+]);
+export type RunHostDiagnosticPhase = z.infer<typeof runHostDiagnosticPhaseSchema>;
+export const skillHostDiagnosticPhaseSchema = z.enum([
+  'dispatch',
+  'execute',
+  'validate',
+  'publish',
+  'cleanup',
+]);
+export type SkillHostDiagnosticPhase = z.infer<typeof skillHostDiagnosticPhaseSchema>;
+export const hostDiagnosticStateSchema = z.enum([
+  'started',
+  'completed',
+  'failed',
+  'cancelled',
+  'interrupted',
+]);
+export const hostDiagnosticErrorCodeSchema = z.enum([
+  'prepare-failed',
+  'audit-failed',
+  'cleanup-failed',
+  'commit-failed',
+  'dispatch-failed',
+  'execute-failed',
+  'validate-failed',
+  'publish-failed',
+  'timed-out',
+  'cancelled',
+  'interrupted',
+  'observer-failed',
+]);
+export type HostDiagnosticErrorCode = z.infer<typeof hostDiagnosticErrorCodeSchema>;
+const hostDiagnosticMetadataSchema = z
+  .object({
+    outputBytes: z.number().int().nonnegative().optional(),
+    outputTruncated: z.boolean().optional(),
+    exitCode: z.number().int().min(-255).max(255).optional(),
+    result: z.enum(['success', 'failure', 'cancelled', 'rejected', 'unknown']).optional(),
+  })
+  .strict();
+const hostDiagnosticEventCommonShape = {
+  id: z.string().min(1).max(512),
+  runId: z.string().min(1).max(512),
+  operationId: z.string().min(1).max(512),
+  parentOperationId: z.string().min(1).max(512).optional(),
+  toolCallId: z.string().min(1).max(512).optional(),
+  executionId: z.string().min(1).max(512).optional(),
+  state: hostDiagnosticStateSchema,
+  createdAt: z.number().int().nonnegative(),
+  durationMs: z.number().finite().nonnegative().optional(),
+  errorCode: hostDiagnosticErrorCodeSchema.optional(),
+  metadata: hostDiagnosticMetadataSchema.optional(),
+};
+const hostDiagnosticSequenceShape = {
+  diagnosticSequence: z.number().int().nonnegative(),
+};
+export const hostDiagnosticEventSchema = z.discriminatedUnion('kind', [
+  z
+    .object({
+      ...hostDiagnosticEventCommonShape,
+      ...hostDiagnosticSequenceShape,
+      kind: z.literal('run-host'),
+      phase: runHostDiagnosticPhaseSchema,
+    })
+    .strict(),
+  z
+    .object({
+      ...hostDiagnosticEventCommonShape,
+      ...hostDiagnosticSequenceShape,
+      kind: z.literal('skill-host'),
+      phase: skillHostDiagnosticPhaseSchema,
+    })
+    .strict(),
+]);
+export type HostDiagnosticEvent = z.infer<typeof hostDiagnosticEventSchema>;
+export const hostDiagnosticEventInputSchema = z.discriminatedUnion('kind', [
+  z
+    .object({
+      ...hostDiagnosticEventCommonShape,
+      kind: z.literal('run-host'),
+      phase: runHostDiagnosticPhaseSchema,
+    })
+    .strict(),
+  z
+    .object({
+      ...hostDiagnosticEventCommonShape,
+      kind: z.literal('skill-host'),
+      phase: skillHostDiagnosticPhaseSchema,
+    })
+    .strict(),
+]);
+export type HostDiagnosticEventInput = z.infer<typeof hostDiagnosticEventInputSchema>;
 
 export const runDiagnosticsIntegritySchema = z.enum(['complete', 'partial', 'unavailable']);
 export const RUN_DIAGNOSTICS_PAGE_SIZE_DEFAULT = 50;

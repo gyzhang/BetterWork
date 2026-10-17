@@ -653,11 +653,12 @@ export class RunDiagnosticsRepository {
       }
       const startEvents = events.filter((event) => event.type === 'run.started');
       if (startEvents.length > 1) hasMalformedEvent = true;
-      const integrity = hasMalformedEvent
-        ? 'partial'
-        : recording === undefined
-          ? 'unavailable'
-          : 'complete';
+      const integrity =
+        hasMalformedEvent || (recording?.sections.includes('host') ?? false)
+          ? 'partial'
+          : recording === undefined
+            ? 'unavailable'
+            : 'complete';
       const modelCallCount = [...modelGroups.values()].reduce(
         (count, group) => count + Number(group.started.length > 0),
         0,
